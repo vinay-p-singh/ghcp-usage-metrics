@@ -14,11 +14,12 @@ the logs Copilot already writes on this machine and produces two artifacts:
 Answer questions by running `query.py` against the JSON. Read the raw JSON only
 if a question genuinely has no matching subcommand.
 
-## Locate the repo
+## Where to run it
 
-This skill ships inside the `ghcp-usage-metrics` checkout, so `query.py` finds the
-extractor by checking `$env:GHCP_USAGE_REPO` and then walking up from the current
-directory looking for `usage.py`. Set the env var when running from elsewhere.
+This folder is self-contained: it carries the extractor (`usage.py`, `ghcp/`,
+`dashboard_template.py`) alongside the instructions and the query CLI. Run every
+command below from this folder, and the artifacts land in `out/` beside them.
+Python 3 with no third-party packages is the only requirement.
 
 ## Refresh when stale
 
@@ -36,7 +37,7 @@ the existing snapshot rather than rescanning on every question.
 ## Query
 
 ```pwsh
-python skills/ghcp-usage-metrics/query.py <command> [options]
+python query.py <command> [options]
 ```
 
 | Command | Answers |
@@ -51,6 +52,7 @@ python skills/ghcp-usage-metrics/query.py <command> [options]
 
 Options: `--since YYYY-MM-DD`, `--until YYYY-MM-DD` (applies to `summary`,
 `projects`, `daily`, `project`), `--top N`, `--data <path to projects.json>`.
+Set `GHCP_USAGE_REPO` to point at a different checkout when one is available.
 
 Prefer one targeted command over dumping several. For "what did I spend last
 week", use `summary --since <date>` and follow up with `projects --since <date>`
@@ -94,3 +96,6 @@ extrapolate past what it reports.
 - **No cloud fallback.** Enterprise-managed accounts cannot reach GitHub's org
   metrics or personal billing APIs. Local logs are the only source; if something
   is not in them, say so instead of filling the gap.
+- **Harness coverage varies by platform.** VS Code data is read from the
+  platform's own user directory, Copilot CLI from `~/.copilot`, and Claude Code
+  from `~/.claude`. A harness the user never ran simply contributes nothing.

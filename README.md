@@ -12,7 +12,9 @@ actually recorded are shown.
 Copilot leaves a trail in a few local places. The extractor reads three
 "harnesses":
 
-- **VS Code** — chat debug logs and saved chat sessions under `%APPDATA%/Code`.
+- **VS Code** — chat debug logs and saved chat sessions in the VS Code user
+  directory (`%APPDATA%/Code` on Windows, `~/Library/Application Support/Code` on
+  macOS, `~/.config/Code` on Linux), including Insiders and VSCodium.
 - **Copilot CLI** — the SQLite store under `~/.copilot`.
 - **Claude Code** — session JSONL under `~/.claude/projects` (requests and tokens only; it reports no AIU).
 
@@ -115,18 +117,25 @@ commands, or `--data <path>` to point at a report elsewhere.
 
 ### Sharing it
 
-Copy `skills/ghcp-usage-metrics/` into your agent's skill directory, such as
-`~/.copilot/skills/`, and it becomes available in every workspace. Left where it
-is, it loads whenever this repo is open.
+The skill folder is self-contained. Alongside the instructions and the query CLI
+it carries a copy of the extractor, so `skills/ghcp-usage-metrics/` works on its
+own: zip it, drop it in someone's skill directory such as `~/.copilot/skills/`,
+or copy it anywhere and run `python usage.py` inside it. Python 3 with no
+third-party packages is the only requirement.
 
-Two things travel with the skill and one thing never does. The instructions and
-the query CLI are just text, so they are safe to share. Your usage data is not
-part of them: each person runs the extractor against their own machine and gets
-their own `out/projects.json`, which stays local and is git-ignored.
+What never travels is your data. Everyone runs the extractor against their own
+machine and gets their own `out/projects.json`, which stays local and is
+git-ignored. Only code and instructions are shared.
 
-`query.py` locates the extractor by checking `GHCP_USAGE_REPO`, then walking up
-from the working directory in search of `usage.py`. Set that variable when you
-run the skill from outside a checkout.
+The bundled copies are committed so a plain clone or download already works, but
+that means they can drift. After changing `usage.py`, `dashboard_template.py`, or
+anything in `ghcp/`, refresh them:
+
+```pwsh
+python scripts/bundle_skill.py
+```
+
+It reports what it updated, or says the bundle is already current.
 
 ### What the skill cannot tell you
 
@@ -151,7 +160,8 @@ approximate one. Worth knowing before you trust a number:
 | `usage.py`               | Scans the logs, builds the project list, writes the HTML. |
 | `dashboard_template.py`  | The dashboard UI (HTML/CSS/JS) with one `__DATA__` slot.  |
 | `ghcp/`                  | Pure, unit-tested helpers (naming, normalize, buckets, merge). |
-| `skills/`                | Agent skill: instructions plus a query CLI over the report. |
+| `skills/`                | Agent skill: instructions, query CLI, and a bundled copy of the extractor. |
+| `scripts/`               | Refreshes the copy of the extractor inside `skills/`. |
 | `tests/`                 | pytest suite over the helpers and a synthetic end-to-end run. |
 | `extension/`             | VS Code extension that runs the extractor in a webview.   |
 

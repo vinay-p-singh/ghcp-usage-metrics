@@ -42,6 +42,15 @@
       "presentation": { "reveal": "always", "panel": "shared", "clear": true }
     },
     {
+      "label": "Sync skill bundle",
+      "type": "process",
+      "command": "python",
+      "args": ["scripts/bundle_skill.py"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "detail": "Refresh the copy of the extractor inside skills/ghcp-usage-metrics/."
+    },
+    {
       "label": "Bundle Python into extension",
       "type": "process",
       "command": "node",
