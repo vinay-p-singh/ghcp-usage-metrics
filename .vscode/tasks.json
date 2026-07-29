@@ -1,0 +1,96 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Generate dashboard",
+      "type": "process",
+      "command": "python",
+      "args": ["usage.py"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "group": { "kind": "build", "isDefault": true },
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true }
+    },
+    {
+      "label": "Open dashboard in browser",
+      "type": "process",
+      "windows": {
+        "command": "powershell",
+        "args": ["-NoProfile", "-Command", "Start-Process", "'${workspaceFolder}/out/dashboard.html'"]
+      },
+      "linux": { "command": "xdg-open", "args": ["${workspaceFolder}/out/dashboard.html"] },
+      "osx": { "command": "open", "args": ["${workspaceFolder}/out/dashboard.html"] },
+      "problemMatcher": [],
+      "presentation": { "reveal": "silent", "panel": "shared" }
+    },
+    {
+      "label": "Launch dashboard",
+      "dependsOrder": "sequence",
+      "dependsOn": ["Generate dashboard", "Open dashboard in browser"],
+      "problemMatcher": [],
+      "group": "build",
+      "detail": "Regenerate out/dashboard.html and open it in the default browser."
+    },
+    {
+      "label": "Run tests",
+      "type": "process",
+      "command": "python",
+      "args": ["-m", "pytest", "-q"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "group": { "kind": "test", "isDefault": true },
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true }
+    },
+    {
+      "label": "Bundle Python into extension",
+      "type": "process",
+      "command": "node",
+      "args": ["extension/scripts/bundle.js"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "Compile extension",
+      "type": "shell",
+      "command": "npm run compile",
+      "options": { "cwd": "${workspaceFolder}/extension" },
+      "problemMatcher": ["$tsc"],
+      "presentation": { "reveal": "silent", "panel": "shared" }
+    },
+    {
+      "label": "Package extension (.vsix)",
+      "type": "shell",
+      "command": "npm run package",
+      "options": { "cwd": "${workspaceFolder}/extension" },
+      "problemMatcher": ["$tsc"],
+      "group": "build",
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true },
+      "detail": "Bundle usage.py + ghcp/ into the extension, compile, and build the .vsix."
+    },
+    {
+      "label": "Install extension (.vsix)",
+      "type": "shell",
+      "windows": {
+        "command": "code --install-extension (Get-ChildItem '${workspaceFolder}/extension/*.vsix' | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName --force"
+      },
+      "linux": {
+        "command": "code --install-extension \"$(ls -t ${workspaceFolder}/extension/*.vsix | head -n1)\" --force"
+      },
+      "osx": {
+        "command": "code --install-extension \"$(ls -t ${workspaceFolder}/extension/*.vsix | head -n1)\" --force"
+      },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "detail": "Install the most recently built .vsix into VS Code."
+    },
+    {
+      "label": "Build, package & install extension",
+      "dependsOrder": "sequence",
+      "dependsOn": ["Package extension (.vsix)", "Install extension (.vsix)"],
+      "problemMatcher": [],
+      "group": "build",
+      "detail": "Full extension pipeline: bundle Python + ghcp/, compile, build .vsix, then install it."
+    }
+  ]
+}

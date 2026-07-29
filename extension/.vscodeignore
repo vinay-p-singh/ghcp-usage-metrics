@@ -1,0 +1,10 @@
+.vscode/**
+src/**
+scripts/**
+tsconfig.json
+**/*.map
+node_modules/**
+py/out/**
+py/__pycache__/**
+py/.cache/**
+py/ghcp/__pycache__/**

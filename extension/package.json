@@ -1,0 +1,77 @@
+{
+  "name": "ghcp-usage-metrics",
+  "displayName": "GHCP Usage Metrics",
+  "description": "Local dashboard of your GitHub Copilot token & AI-credit (AIU) usage per project, model, harness, agent, skill and day, with cost ranking, strengths and forecasting. Runs the bundled Python extractor (usage.py) and hosts its report in a webview. Refresh re-scans your logs live. Nothing leaves your machine.",
+  "version": "0.3.9",
+  "publisher": "local",
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/OWNER/ghcp-usage-metrics.git"
+  },
+  "bugs": {
+    "url": "https://github.com/OWNER/ghcp-usage-metrics/issues"
+  },
+  "homepage": "https://github.com/OWNER/ghcp-usage-metrics#readme",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "copilot",
+    "usage",
+    "metrics",
+    "tokens",
+    "aiu",
+    "dashboard"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "ghcpUsage.openDashboard",
+        "title": "GHCP Usage: Open Dashboard"
+      },
+      {
+        "command": "ghcpUsage.refresh",
+        "title": "GHCP Usage: Refresh Data"
+      },
+      {
+        "command": "ghcpUsage.diagnostics",
+        "title": "GHCP Usage: Diagnostics"
+      }
+    ],
+    "configuration": {
+      "title": "GHCP Usage Metrics",
+      "properties": {
+        "ghcpUsage.pythonPath": {
+          "type": "string",
+          "default": "python",
+          "description": "Python interpreter used to run usage.py (e.g. 'python', 'python3', or an absolute path)."
+        },
+        "ghcpUsage.repoPath": {
+          "type": "string",
+          "default": "",
+          "description": "Folder containing usage.py. Empty = auto-detect from the open workspace folders, then the parent folder of this extension, then the bundled copy."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run check-version && npm run compile && npm run bundle",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "bundle": "node scripts/bundle.js",
+    "check-version": "node scripts/check-version.js",
+    "package": "npm run bundle && npx --yes @vscode/vsce package --allow-missing-repository"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.4.0"
+  }
+}
