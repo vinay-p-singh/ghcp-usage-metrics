@@ -82,6 +82,68 @@ Run the tests with:
 python -m pytest -q
 ```
 
+## Ask it questions in chat
+
+The repo ships an agent skill in `skills/ghcp-usage-metrics/`. With it loaded, you
+can ask an AI coding agent things like "which project costs the most", "what is my
+priciest subagent", or "refresh my usage data", and it answers from your own
+numbers.
+
+The skill exists because `out/projects.json` is around 130 KB of nested JSON, far
+too much to read into a conversation. Instead it calls a small query CLI that
+prints one compact table per question:
+
+```pwsh
+python skills/ghcp-usage-metrics/query.py summary
+python skills/ghcp-usage-metrics/query.py projects --top 10
+python skills/ghcp-usage-metrics/query.py agents
+python skills/ghcp-usage-metrics/query.py project ghcp-usage-metrics
+```
+
+| Command             | Answers                                                  |
+| ------------------- | -------------------------------------------------------- |
+| `summary`           | Totals plus the split across the three harnesses.         |
+| `projects [--top N]`| Projects ranked by AIU.                                   |
+| `agents`            | Agents and subagents ranked by AIU, with AIU per request. |
+| `models`            | Models ranked by AIU.                                     |
+| `skills`            | Skills ranked by invocation count.                        |
+| `daily`             | One row per active day.                                   |
+| `project <name>`    | One project in detail, matched on a substring.            |
+
+Add `--since YYYY-MM-DD` and `--until YYYY-MM-DD` to narrow the day-based
+commands, or `--data <path>` to point at a report elsewhere.
+
+### Sharing it
+
+Copy `skills/ghcp-usage-metrics/` into your agent's skill directory, such as
+`~/.copilot/skills/`, and it becomes available in every workspace. Left where it
+is, it loads whenever this repo is open.
+
+Two things travel with the skill and one thing never does. The instructions and
+the query CLI are just text, so they are safe to share. Your usage data is not
+part of them: each person runs the extractor against their own machine and gets
+their own `out/projects.json`, which stays local and is git-ignored.
+
+`query.py` locates the extractor by checking `GHCP_USAGE_REPO`, then walking up
+from the working directory in search of `usage.py`. Set that variable when you
+run the skill from outside a checkout.
+
+### What the skill cannot tell you
+
+The tool refuses to guess, so several questions have no answer rather than an
+approximate one. Worth knowing before you trust a number:
+
+| Limitation                      | What it means in practice                                                                                          |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| AIU predates its own telemetry  | Sessions logged before `copilotUsageNanoAiu` existed count real requests and tokens but add zero AIU. Early months read low because the metric is missing, not because usage was. |
+| Claude Code reports no AIU      | Its requests and tokens are real; its AIU is genuinely zero. That is silence, not thrift.                          |
+| Agent personas fold together    | Only subagents launched through the `runSubagent` tool get their own attribution. Agent-picker modes are recorded as "GitHub Copilot Chat". |
+| Session retention is short      | VS Code keeps roughly the 70 most recent sessions in its store, so older agent and skill runs are purged and unrecoverable. |
+| Some breakdowns ignore dates    | Per-day buckets carry no model, agent, or skill dimension, so those breakdowns are lifetime totals. `--since` and `--until` change only the day-based figures. |
+| Skill totals overlap            | A session that invoked three skills counts its tokens toward all three, so skill AIU does not sum to the overall total. |
+| Logs rotate                     | VS Code debug logs are trimmed and saved chat sessions keep only some requests, so older days are sparse. Real, recorded, and thin. |
+| No cloud reconciliation         | Enterprise-managed accounts cannot reach GitHub's org metrics or personal billing APIs. Local logs are the only source. |
+
 ## Project layout
 
 | Path                     | Job                                                       |
@@ -89,6 +151,7 @@ python -m pytest -q
 | `usage.py`               | Scans the logs, builds the project list, writes the HTML. |
 | `dashboard_template.py`  | The dashboard UI (HTML/CSS/JS) with one `__DATA__` slot.  |
 | `ghcp/`                  | Pure, unit-tested helpers (naming, normalize, buckets, merge). |
+| `skills/`                | Agent skill: instructions plus a query CLI over the report. |
 | `tests/`                 | pytest suite over the helpers and a synthetic end-to-end run. |
 | `extension/`             | VS Code extension that runs the extractor in a webview.   |
 
