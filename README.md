@@ -43,7 +43,8 @@ flowchart LR
         U <--> G
     end
 
-    U -- "inject JSON into __DATA__" --> T["dashboard_template.py<br/>HTML + CSS + JS"]
+    U -- "inject JSON into __DATA__" --> T["build_dashboard.py<br/>assembles web/ into one file"]
+    W["web/<br/>dashboard.html + css + js"] --> T
     T --> H["out/dashboard.html<br/>self-contained report"]
     H --> B["Open in browser"]
     H --> E["VS Code extension<br/>webview + Refresh"]
@@ -57,10 +58,10 @@ Walking the pieces:
 2. **Normalize + merge.** The `ghcp/` package holds the pure, testable helpers —
    project naming, model/agent normalization, the bucket types, and the `_merge`
    that combines harnesses without double-counting.
-3. **Render.** `usage.py` serializes the project list to JSON and drops it into
-   the single `__DATA__` placeholder in `dashboard_template.py`, then writes
-   `out/dashboard.html`. All markup, styling, and interactivity live in that
-   template.
+3. **Render.** `build_dashboard.py` stitches `web/dashboard.html`, the stylesheet
+   and the JavaScript modules into one string; `usage.py` drops the project JSON
+   into its `__DATA__` placeholder and writes `out/dashboard.html`. The result
+   has no external references, so it opens anywhere.
 4. **View.** Open the HTML directly, or run the extension so a **Refresh data**
    button can re-run the extractor live inside a webview.
 
@@ -73,6 +74,7 @@ guess.
 
 ```pwsh
 python usage.py            # writes out/dashboard.html
+python usage.py --quick 10 # only the last 10 days of uncached logs
 ```
 
 Then open `out/dashboard.html`, or use the VS Code task **Launch dashboard** to
@@ -81,8 +83,36 @@ generate and open it in one step.
 Run the tests with:
 
 ```pwsh
-python -m pytest -q
+python -m pytest -q                    # Python, and the JS suite through it
+node --test "tests/js/*.test.js"       # JavaScript on its own
 ```
+
+## What you get
+
+Eight views over the same filtered scope:
+
+| View           | Shows                                                                    |
+| -------------- | ------------------------------------------------------------------------ |
+| **Overview**   | Credits per day, top projects, and a per-project table that expands into models, agents and tools. |
+| **Calendar**   | A day grid you can hover for detail, click to filter to one day, or drag across for a range. |
+| **Breakdown**  | Requests by harness, credits by model, top projects, and code output by language. |
+| **Agents**     | Base harnesses and `runSubagent` subagents ranked by spend, with cost-per-request signals. |
+| **Skills**     | Which `SKILL.md` files actually got read, and what the sessions that used them cost. |
+| **Strengths**  | Your most-used model and agent, output volume, edit and read tool-calls, turns per session. |
+| **Forecast**   | Projected spend from your recent rate, against a monthly budget if you set one. |
+| **Diagnostics**| What the last scan read, skipped and failed on — including which requests carry no token payload. |
+
+Filters apply everywhere at once: date range, harness, and project. Set a cost
+per credit in **Config** and every figure gains a currency column. Projects that
+never recorded a token start hidden behind a link, and the Diagnostics tab can be
+switched off once you no longer need it.
+
+## Going deeper
+
+[ARCHITECTURE.md](ARCHITECTURE.md) is the guided tour: the data model, how each
+harness is read, the invariants that keep the numbers honest, how the page is
+assembled, and where to make a given change. Read it before touching the
+extractor or the dashboard internals.
 
 ## Ask it questions in chat
 
@@ -128,14 +158,15 @@ machine and gets their own `out/projects.json`, which stays local and is
 git-ignored. Only code and instructions are shared.
 
 The bundled copies are committed so a plain clone or download already works, but
-that means they can drift. After changing `usage.py`, `dashboard_template.py`, or
-anything in `ghcp/`, refresh them:
+that means they can drift. After changing `usage.py`, `build_dashboard.py`, or
+anything in `ghcp/` or `web/`, refresh them:
 
 ```pwsh
 python scripts/bundle_skill.py
 ```
 
-It reports what it updated, or says the bundle is already current.
+It reports what it updated, or says the bundle is already current. A test fails
+the build if the committed copy falls behind, so the drift cannot go unnoticed.
 
 ### What the skill cannot tell you
 
@@ -148,7 +179,7 @@ approximate one. Worth knowing before you trust a number:
 | Claude Code reports no AIU      | Its requests and tokens are real; its AIU is genuinely zero. That is silence, not thrift.                          |
 | Agent personas fold together    | Only subagents launched through the `runSubagent` tool get their own attribution. Agent-picker modes are recorded as "GitHub Copilot Chat". |
 | Session retention is short      | VS Code keeps roughly the 70 most recent sessions in its store, so older agent and skill runs are purged and unrecoverable. |
-| Some breakdowns ignore dates    | Per-day buckets carry no model, agent, or skill dimension, so those breakdowns are lifetime totals. `--since` and `--until` change only the day-based figures. |
+| Some breakdowns ignore dates    | Per-day buckets carry no agent or skill dimension, so those breakdowns are lifetime totals. Models are dated and do follow `--since` / `--until`. |
 | Skill totals overlap            | A session that invoked three skills counts its tokens toward all three, so skill AIU does not sum to the overall total. |
 | Logs rotate                     | VS Code debug logs are trimmed and saved chat sessions keep only some requests, so older days are sparse. Real, recorded, and thin. |
 | No cloud reconciliation         | Enterprise-managed accounts cannot reach GitHub's org metrics or personal billing APIs. Local logs are the only source. |
@@ -157,12 +188,13 @@ approximate one. Worth knowing before you trust a number:
 
 | Path                     | Job                                                       |
 | ------------------------ | -------------------------------------------------------- |
-| `usage.py`               | Scans the logs, builds the project list, writes the HTML. |
-| `dashboard_template.py`  | The dashboard UI (HTML/CSS/JS) with one `__DATA__` slot.  |
-| `ghcp/`                  | Pure, unit-tested helpers (naming, normalize, buckets, merge). |
+| `usage.py`               | Entry point: platform paths, CLI flags, scan orchestration. |
+| `build_dashboard.py`     | Assembles `web/` into the single template string.         |
+| `ghcp/`                  | The extractor: scanners, billing, buckets, merge, diagnostics, report. |
+| `web/`                   | The dashboard itself — markup, stylesheet, and JS modules. |
 | `skills/`                | Agent skill: instructions, query CLI, and a bundled copy of the extractor. |
-| `scripts/`               | Refreshes the copy of the extractor inside `skills/`. |
-| `tests/`                 | pytest suite over the helpers and a synthetic end-to-end run. |
+| `scripts/`               | Refreshes the copy of the extractor inside `skills/`.     |
+| `tests/`                 | pytest over the extractor, `node --test` over the dashboard. |
 | `extension/`             | VS Code extension that runs the extractor in a webview.   |
 
 The extension keeps its own [README](extension/README.md) with setup and

@@ -1,6 +1,6 @@
 """Shared pytest setup: make the repo-root modules importable.
 
-``usage.py`` and ``dashboard_template.py`` live at the repository root (not in a
+``usage.py`` and ``build_dashboard.py`` live at the repository root (not in a
 package), so add that root to ``sys.path`` before any test imports them.
 """
 from __future__ import annotations

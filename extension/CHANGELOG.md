@@ -1,139 +1,123 @@
 # Changelog
 
-All notable changes to the **GHCP Usage Metrics** extension are documented here.
-This project adheres to [Semantic Versioning](https://semver.org/).
+Releases are recorded here from 1.0.0 onward. The development that led up to it
+is summarised at the end, as phases rather than versions — those builds never
+shipped to anyone, and listing them as releases would overstate what happened.
 
-## [0.3.9] — 2026-07-27
+## [1.0.0] — 2026-07-30
 
-### Added
-- **New "Auto" theme mode, now the default.** The dashboard adopts the editor's
-  own palette (`--vscode-*`) instead of imposing one of its own, so a panel
-  docked in a Light+ window no longer looks like a foreign dark island. It
-  tracks live theme switches, and every token keeps a literal fallback so the
-  same file still renders correctly when opened straight from disk in a
-  browser — there it mirrors the OS light/dark preference instead. Existing
-  explicit choices (Light / Dim / Dark / Contrast) are untouched.
+First release.
 
-### Changed
-- **No more first-paint flash.** Size tier and theme are resolved by a small
-  inline script at the top of `<body>`, so the opening frame is already
-  correct. Previously a narrow panel briefly rendered the desktop layout, and a
-  dark editor briefly showed light surfaces.
-- **Resizing across a tier boundary now redraws only the two SVG charts** (the
-  daily bar chart and the activity calendar) rather than re-aggregating and
-  re-rendering the whole dataset.
+Reads the GitHub Copilot logs already on your machine — VS Code, Copilot CLI and
+Claude Code — and reports what they recorded: AI credits, requests, tokens and
+active days, split by project, model, agent, skill and day.
 
-## [0.3.8] — 2026-07-27
+### The dashboard
 
-### Changed
-- **Everything scales now, not just the pills and sidebar.** The tab strip,
-  toolbar buttons, panels, tables, legends, donut charts, activity calendar and
-  stat cards all read a shared set of size tokens that follow the view.
-- **Replaced `vw`-based `clamp()` and the single media query with measured
-  tiers.** A `ResizeObserver` measures the real viewport width and sets
-  `body[data-size="xs|sm|md|lg|xl"]`; every density token hangs off that. The
-  old approach scaled off `vw`, so the same dashboard looked different in a
-  docked webview than in a full-screen browser tab at the same pixel width, and
-  drifted under `window.zoomLevel`. Charts with baked-in SVG geometry are
-  redrawn when the tier changes.
-- **Honour the editor's UI font.** The dashboard now uses
-  `var(--vscode-font-family, …)`, falling back to the system stack when the
-  HTML is opened outside VS Code.
+- Eight views: overview, activity calendar, breakdown, agents, skills,
+  strengths, forecast and diagnostics.
+- The calendar is clickable and draggable — pick a day or a range and every
+  number follows.
+- Costs appear in your own currency once you set a rate. Nothing is shown until
+  you do, because no credit price is readable locally.
 
-## [0.3.7] — 2026-07-27
+### Scanning
 
-### Fixed
-- **Corrected the "only request counts" guidance.** Token/AIU data is *not*
-  gated by a Trace log level (Info works fine). It comes from fields Copilot Chat
-  writes into its own logs, which get trimmed/rotated — so a machine may retain
-  only request counts. The onboarding banner and README no longer mention log
-  level.
+- A quick pass over recent logs paints the dashboard, then a full scan replaces
+  it in place without costing you your tab, filters or selection.
+- Diagnostics reports what the last scan read, skipped and failed on, including
+  which requests carry no token payload and why.
 
-### Added
-- **`GHCP Usage: Diagnostics`** command (also reachable from the banner): reports
-  the scanned VS Code roots/variants and how many logs actually carry token/credit
-  fields, so it's clear why data may be missing on a given machine.
-- **Scans all VS Code variants** now (stable + Insiders / VSCodium / Exploration),
-  so token data isn't missed when Copilot ran under a different install.
+### Filtering
 
-### Removed
-- The incorrect *Enable Copilot Logging* command.
+- Date range, harness and project filters. Every project is counted by default;
+  untick one to exclude it.
+- Projects that never recorded a token or a credit start unticked and sit behind
+  a link in the sidebar. They are hidden, never discarded.
+- Model checkboxes work the same way as projects: unticking a model removes it
+  from every figure — totals, charts, calendar and breakdowns — and the model
+  list follows the date range. Session counts and requests with no recorded
+  model are the two things a model filter cannot reach.
+- A hard-filter config for projects, prefixes, harnesses, models and agents,
+  saved in the browser.
 
-## [0.3.6] — 2026-07-27
+### Beyond the dashboard
 
-### Changed
-- **Faster, non-blocking open.** The panel now paints instantly: it shows the
-  previous report right away (stale-while-revalidate) and rescans in the
-  background, or shows a loading screen on the very first run instead of a blank
-  window.
-- **Faster cold scan.** Debug-log billing files are now parsed in parallel
-  (process pool) before the sequential pass, cutting first-ever scan time
-  (~54s → ~34s locally). Output is unchanged — only the cache is pre-filled.
+- A VS Code extension that runs the extractor and shows the report in a webview.
+- An agent skill with a query CLI, so a coding agent can answer questions from
+  your own numbers without loading the whole report into a conversation.
 
-## [0.3.5] — 2026-07-27
+Every figure comes from what GitHub actually wrote down. Nothing is estimated,
+extrapolated or back-filled — gaps are reported as gaps.
 
-### Changed
-- Summary pills now scale fluidly with the view (track size, padding and value
-  font shrink together) so they stay compact in the narrow webview.
-- The filters sidebar shrinks fluidly (`clamp(236px, 26vw, 320px)`) before it
-  stacks; the stack/collapse breakpoint moved to 780px.
+---
 
-## [0.3.4] — 2026-07-27
+## Before 1.0
 
-### Added
-- Collapsible filters sidebar with a **Filters** toolbar toggle; the layout now
-  stacks and the sidebar auto-collapses in the narrow VS Code webview.
-- Python preflight check: a clear "Python not found" prompt with an **Open
-  Settings** action instead of a raw stderr dump.
-- *GHCP Usage: Enable Copilot Logging* command and an in-dashboard onboarding
-  banner shown when only request counts are available (no token/AIU data).
+How the tool got here. Kept because the reversals are the interesting part, and
+because the reasoning behind each one still constrains what gets built next.
+[ARCHITECTURE.md](../ARCHITECTURE.md) carries the detail.
 
-### Changed
-- README documents the Python 3.8+ (stdlib-only) and Copilot Chat Trace-logging
-  requirements.
+### Reading the logs at all
 
-## [0.3.3] — 2026-07-27
+The first working version read VS Code chat logs and the Copilot CLI database
+and produced a single HTML page. One decision from that week still holds: Python
+decides every number, and the dashboard, the extension and the chat skill are
+all just ways of looking at the same output. It has meant one place to check
+when a figure looks wrong.
 
-### Changed
-- Version bump to produce a fresh `.vsix` for smoke-test distribution (no functional changes).
+### Estimating credits, then deleting all of it
 
-## [0.3.2] — 2026-07-25
+Credits are only recorded from mid-May 2026. Earlier sessions had tokens but no
+credits, so the tool inferred them from a per-model rate. The totals looked
+fuller and the charts looked complete.
 
-### Changed
-- Internal refactor (no behavior change; verified identical dashboard output): the Python extractor was split into a `ghcp/` package of pure helpers (`constants`, `naming`, `normalize`, `jsonl`, `model`) with the I/O scanners kept in `usage.py`; duplicated accumulation collapsed into an `_apply_billing` helper; magic strings replaced with named constants.
+They were also unverifiable, and nothing on screen distinguished a recorded
+credit from a computed one. Removing every estimate cost roughly 25,000 credits
+off the headline and turned the remainder into something worth trusting. That
+became the rule the project is now built around: show what was recorded, report
+gaps as gaps, and never let a plausible number stand in for a missing one.
 
-### Added
-- `pytest` test suite (57 tests: pure-helper units, a synthetic golden-master end-to-end, and live-output invariants) plus a CI workflow.
-- `.vscode/` tasks & launch configs (Launch dashboard, Run tests, Package/Install extension) and a `check-version` guard that fails packaging if `package.json` and this changelog disagree.
-- `bundle.js` now also copies the `ghcp/` package into the packaged extension.
+### Finding credits that were genuinely there
 
-## [0.3.1] — 2026-07-25
+Roughly 12,400 credits were being missed entirely. Subagents launched through
+`runSubagent` write their own log file beside the parent's, and nothing was
+reading them. Adding them was the opposite of the estimation problem — real
+recorded values that had simply gone unread — and the cross-dimension invariant
+proved they were not being counted twice.
 
-### Changed
-- Agents tab: the global "Priciest per request" signal card is now **"Priciest base agent / req"** (computed over base/harness agents only), so it no longer duplicates the **"Priciest subagent / req"** card. The two cards now cover disjoint pools (base vs. subagents).
+Saved chat sessions were added as a second source around the same time. VS Code
+rotates its debug logs but keeps session files far longer, so history reached
+back from about three months to seven. Sessions already covered by the debug
+logs are skipped, which is what stops the two sources overlapping.
 
-### Added (Marketplace prep)
-- Extension `icon` (`media/icon.png`, generated by `scripts/make_icon.py`).
-- `repository`, `bugs`, and `homepage` metadata in `package.json`.
-- This CHANGELOG.
+### Making it answer questions
 
-### Pre-publish checklist (before `vsce publish`)
-- [ ] Set `publisher` in `package.json` to your **registered** VS Marketplace publisher ID (currently `local`).
-- [ ] Replace `OWNER` in the `repository`/`bugs`/`homepage` URLs with the real GitHub owner/repo.
-- [ ] Run `npm run package` and verify the `.vsix`, then `vsce publish` (or upload via the Marketplace portal).
+One page became eight views as the questions got sharper: which day, which
+model, which agent, which skill, what it might cost next month. Then a VS Code
+extension so the report could be regenerated without a terminal, and an agent
+skill with a query CLI so a coding agent could answer from the numbers directly
+— the full report is far too large to read into a conversation.
 
-## [0.3.0] — 2026-07-25
+### Making it safe to change
 
-### Added
-- Agents tab (cost ranking, base vs. subagent grouping, per-agent × model expander).
-- Skills tab (SKILL.md invocation counts + attributed AIU).
-- Strengths tab (most-used model/agent, output tokens, edit/read tool-calls, turns/session).
-- Forecast tab (EoM + 3/4/6-month horizons with optional budget cascade).
+By this point one file held a thousand lines of extractor and another held two
+thousand lines of dashboard. Both were split, into the `ghcp` package and into
+`web/`, but only after golden-master tests were in place to prove the output had
+not moved. That order mattered: the tests came first, so the refactor was
+provable rather than hopeful.
 
-## [0.2.0] — 2026-07-25
+Test coverage then grew to meet the code — unit tests either side of the
+language boundary, a synthetic log tree for end-to-end runs, jsdom for the
+interactions, and a browser pass for what only a real cascade can catch.
 
-### Added
-- Initial VS Code extension: runs the bundled Python extractor (`usage.py`) and hosts the dashboard in a webview.
-- Commands: **GHCP Usage: Open Dashboard**, **GHCP Usage: Refresh Data**.
-- Settings: `ghcpUsage.pythonPath`, `ghcpUsage.repoPath`.
-- Reproducible `.vsix` packaging that bundles the Python extractor (`py/`).
+### Saying what the numbers do not cover
+
+Several projects showed requests but no credits, which reads as a bug and is
+not. A diagnostics view now reports what each scan read, skipped and failed on,
+and names the projects whose requests carry no token payload.
+
+The filters were rethought in the same spirit: every project counts unless you
+exclude it, projects that never recorded a token are demoted rather than
+deleted, and the model filter states plainly which panels it can and cannot
+reach.

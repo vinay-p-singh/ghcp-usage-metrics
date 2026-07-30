@@ -7,12 +7,21 @@ same activity:
   by_model  model -> {requests, in, out, aiu}
   by_agent  agent -> {requests, in, out, aiu}
   by_am     f"{agent}{AM_SEP}{model}" -> {requests, in, out, aiu}
+  by_dm     f"{date}{AM_SEP}{model}"  -> {requests, in, out, aiu}
+    by_sdm    f"{session}{AM_SEP}{date}{AM_SEP}{model}" -> 1
   by_skill  skill -> {reads, sessions, requests, in, out, aiu}
   by_tool   tool  -> count
   by_lang   lang  -> count
 
-Every AIU total must agree across by_day / by_model / by_agent / by_am — that
-invariant is what the test-suite guards.
+Every AIU total must agree across by_day / by_model / by_agent / by_am / by_dm
+-- that invariant is what the test-suite guards.
+
+``by_dm`` exists so the dashboard can filter by model and still re-scope the
+day-level figures. The logs record the date and the model on the same event;
+keeping only the two separate aggregates threw that pairing away, which is what
+used to make a model filter unable to move the headline numbers. ``by_sdm``
+retains session membership as set-like facts, so mixed-model sessions can be
+counted distinctly instead of divided between models.
 """
 from __future__ import annotations
 
@@ -48,6 +57,8 @@ def _metrics() -> dict:
             "by_model": defaultdict(_flatbucket),
             "by_agent": defaultdict(_flatbucket),
             "by_am": defaultdict(_flatbucket),
+            "by_dm": defaultdict(_flatbucket),
+            "by_sdm": defaultdict(int),
             "by_skill": defaultdict(_skillbucket),
             "by_tool": defaultdict(int),
             "by_lang": defaultdict(int)}
@@ -79,6 +90,8 @@ def _merge(d: dict, members: list[str]) -> dict:
     by_model: dict[str, dict] = {}
     by_agent: dict[str, dict] = {}
     by_am: dict[str, dict] = {}
+    by_dm: dict[str, dict] = {}
+    by_sdm: dict[str, int] = {}
     by_skill: dict[str, dict] = {}
     by_tool: dict[str, int] = {}
     by_lang: dict[str, int] = {}
@@ -91,11 +104,13 @@ def _merge(d: dict, members: list[str]) -> dict:
             for f in ("sessions", "requests", "in", "out", "aiu"):
                 t[f] += b[f]
         for dim_src, dim_dst in (("by_model", by_model), ("by_agent", by_agent),
-                                 ("by_am", by_am)):
+                                 ("by_am", by_am), ("by_dm", by_dm)):
             for key, b in x.get(dim_src, {}).items():
                 t = dim_dst.setdefault(key, _flatbucket())
                 for f in ("requests", "in", "out", "aiu"):
                     t[f] += b[f]
+                for key in x.get("by_sdm", {}):
+                    by_sdm[key] = 1
         for key, b in x.get("by_skill", {}).items():
             t = by_skill.setdefault(key, _skillbucket())
             for f in ("reads", "sessions", "requests", "in", "out", "aiu"):
@@ -103,12 +118,13 @@ def _merge(d: dict, members: list[str]) -> dict:
         for dim_src, dim_dst in (("by_tool", by_tool), ("by_lang", by_lang)):
             for key, c in x.get(dim_src, {}).items():
                 dim_dst[key] = dim_dst.get(key, 0) + c
-    for grp in (by_day, by_model, by_agent, by_am, by_skill):
+    for grp in (by_day, by_model, by_agent, by_am, by_dm, by_skill):
         for b in grp.values():
             b["aiu"] = round(b["aiu"], 4)
     return {"by_day": by_day, "by_model": by_model, "by_agent": by_agent,
-            "by_am": by_am, "by_skill": by_skill, "by_tool": by_tool,
-            "by_lang": by_lang}
+            "by_am": by_am, "by_dm": by_dm, "by_sdm": by_sdm,
+            "by_skill": by_skill,
+            "by_tool": by_tool, "by_lang": by_lang}
 
 
 def _sessions(client: dict) -> int:

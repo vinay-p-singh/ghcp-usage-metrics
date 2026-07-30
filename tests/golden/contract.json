@@ -1,0 +1,72 @@
+{
+  "composite_dimensions": {
+    "by_am": [
+      "agent",
+      "model"
+    ],
+    "by_dm": [
+      "date",
+      "model"
+    ],
+    "by_sdm": [
+      "session",
+      "date",
+      "model"
+    ]
+  },
+  "counted_dimensions": [
+    "by_sdm",
+    "by_tool",
+    "by_lang"
+  ],
+  "day_fields": [
+    "sessions",
+    "requests",
+    "in",
+    "out",
+    "aiu"
+  ],
+  "dimensions": [
+    "by_day",
+    "by_model",
+    "by_agent",
+    "by_am",
+    "by_dm",
+    "by_sdm",
+    "by_skill",
+    "by_tool",
+    "by_lang"
+  ],
+  "flat_fields": [
+    "requests",
+    "in",
+    "out",
+    "aiu"
+  ],
+  "harnesses": [
+    "vscode",
+    "cli",
+    "claude"
+  ],
+  "project_keys": [
+    "name",
+    "vscode",
+    "cli",
+    "claude"
+  ],
+  "sentinels": {
+    "claude_agent": "Claude Code",
+    "cli_agent": "Copilot CLI",
+    "default_agent": "GitHub Copilot Chat",
+    "no_token_model": "(no token data)"
+  },
+  "separator": "\u001f",
+  "skill_fields": [
+    "reads",
+    "sessions",
+    "requests",
+    "in",
+    "out",
+    "aiu"
+  ]
+}

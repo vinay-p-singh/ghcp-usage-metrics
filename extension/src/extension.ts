@@ -173,14 +173,14 @@ function runCapture(py: string, root: string, args: string[]): Promise<string> {
   });
 }
 
-// Run `python usage.py` in the repo root. Resolves once out/dashboard.html is
+// Run `python usage.py <args>` in the repo root. Resolves once out/dashboard.html is
 // (re)written; rejects with the captured stderr on failure.
-function runExtractor(root: string): Promise<void> {
+function runExtractor(root: string, args: string[] = []): Promise<void> {
   const py = setting<string>("pythonPath", "python");
   return new Promise((resolve, reject) => {
     cp.execFile(
       py,
-      ["usage.py"],
+      ["usage.py", ...args],
       { cwd: root, windowsHide: true, maxBuffer: 64 * 1024 * 1024 },
       (err, _stdout, stderr) => {
         if (err) {
@@ -190,6 +190,58 @@ function runExtractor(root: string): Promise<void> {
         }
       }
     );
+  });
+}
+
+interface DataMsg {
+  type: "data";
+  phase: "quick" | "full";
+  projects: unknown;
+  diag: unknown;
+  generated: string;
+}
+
+// The webview only starts listening once its script has run, so data produced
+// before that would be dropped. Buffer the newest payload until it says ready.
+let webviewReady = false;
+let pendingData: DataMsg | undefined;
+
+function pushData(msg: DataMsg): void {
+  if (panel && webviewReady) {
+    void panel.webview.postMessage(msg);
+  } else {
+    pendingData = msg;
+  }
+}
+
+function flushPending(): void {
+  if (panel && pendingData) {
+    void panel.webview.postMessage(pendingData);
+    pendingData = undefined;
+  }
+}
+
+function readJson(root: string, file: string): unknown {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(root, "out", file), "utf8"));
+  } catch {
+    return undefined;
+  }
+}
+
+// Send the freshly written report data to the open panel without replacing its
+// HTML, so the reader keeps their tab, filters and scroll position.
+function sendReport(root: string, phase: "quick" | "full"): void {
+  const projects = readJson(root, "projects.json");
+  if (!Array.isArray(projects)) {
+    return;
+  }
+  pushData({
+    type: "data",
+    phase,
+    projects,
+    diag: readJson(root, "diagnostics.json"),
+    generated: new Date().toLocaleString()
   });
 }
 
@@ -229,12 +281,20 @@ function loadingHtml(webview: vscode.Webview): string {
   );
 }
 
-async function refreshInto(panel: vscode.WebviewPanel, root: string): Promise<void> {
+// Replacing the HTML restarts the webview's script, so any queued payload is
+// stale and the ready handshake has to happen again.
+function setHtml(target: vscode.WebviewPanel, html: string): void {
+  webviewReady = false;
+  pendingData = undefined;
+  target.webview.html = html;
+}
+
+async function refreshInto(root: string): Promise<void> {
   await vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Notification, title: "GHCP Usage: scanning Copilot logs…" },
+    { location: vscode.ProgressLocation.Window, title: "GHCP Usage: scanning Copilot logs…" },
     async () => runExtractor(root)
   );
-  panel.webview.html = loadReport(root, panel.webview);
+  sendReport(root, "full");
 }
 
 async function safeRefresh(root: string): Promise<void> {
@@ -242,7 +302,7 @@ async function safeRefresh(root: string): Promise<void> {
     return;
   }
   try {
-    await refreshInto(panel, root);
+    await refreshInto(root);
   } catch (e: unknown) {
     vscode.window.showErrorMessage("GHCP Usage refresh failed: " + errMsg(e));
   }
@@ -285,10 +345,15 @@ async function openDashboard(context: vscode.ExtensionContext): Promise<void> {
   );
   panel.onDidDispose(() => {
     panel = undefined;
+    webviewReady = false;
+    pendingData = undefined;
   });
   panel.webview.onDidReceiveMessage(
     async (msg: { type?: string }) => {
-      if (msg?.type === "refresh") {
+      if (msg?.type === "ready") {
+        webviewReady = true;
+        flushPending();
+      } else if (msg?.type === "refresh") {
         await safeRefresh(root);
       } else if (msg?.type === "diagnostics") {
         await runDiagnostics(context);
@@ -298,16 +363,35 @@ async function openDashboard(context: vscode.ExtensionContext): Promise<void> {
     context.subscriptions
   );
 
-  // Paint instantly: show the previous report if one exists (stale-while-
-  // revalidate), else a loading screen — then rescan in the background so the
-  // window never blocks on the scan.
+  // Paint something usable immediately, then complete the data in the
+  // background. A previous report is already the whole history, so it wins; with
+  // no report at all we run a quick scan of the recent window first rather than
+  // making the reader wait out a cold full scan behind a spinner.
   const reportPath = path.join(root, "out", "dashboard.html");
-  try {
-    panel.webview.html = fs.existsSync(reportPath)
-      ? loadReport(root, panel.webview)
-      : loadingHtml(panel.webview);
-  } catch {
-    panel.webview.html = loadingHtml(panel.webview);
+  webviewReady = false;
+  pendingData = undefined;
+  const hadReport = fs.existsSync(reportPath);
+  if (hadReport) {
+    try {
+      setHtml(panel, loadReport(root, panel.webview));
+    } catch {
+      setHtml(panel, loadingHtml(panel.webview));
+    }
+  } else {
+    setHtml(panel, loadingHtml(panel.webview));
+    const days = Math.max(1, setting<number>("quickScanDays", 10));
+    try {
+      await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Window,
+          title: `GHCP Usage: scanning the last ${days} days\u2026`
+        },
+        () => runExtractor(root, ["--quick", String(days)])
+      );
+      setHtml(panel, loadReport(root, panel.webview));
+    } catch (e: unknown) {
+      vscode.window.showErrorMessage("GHCP Usage scan failed: " + errMsg(e));
+    }
   }
   await safeRefresh(root);
 }

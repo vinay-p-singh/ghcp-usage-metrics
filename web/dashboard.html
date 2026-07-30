@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GitHub Copilot — Token &amp; AI-Credit Usage</title>
+<style><!--@css--></style>
+</head>
+<body>
+<script><!--@boot-js--></script>
+
+<div class="topbar">
+  <div>
+    <h1>GitHub Copilot — Token &amp; AI-Credit Usage</h1>
+    <p class="sub" id="refState" data-gen="__GENERATED__"></p>
+  </div>
+  <div class="toolbar">
+    <button class="tbtn" id="filtersBtn" aria-pressed="true" title="Show or hide the filters sidebar">&#9776; Filters</button>
+    <button class="tbtn primary" id="refreshBtn">&#8635; Refresh data</button>
+    <button class="tbtn" id="csvBtn">Export CSV</button>
+    <button class="tbtn" id="cfgBtn">&#9881; Config</button>
+    <div class="themewrap">
+      <button class="tbtn" id="themeBtn" aria-haspopup="true" aria-expanded="false">&#9681; Theme</button>
+      <div class="theme-pop" id="themePop" hidden>
+        <p class="tp-label">Mode</p>
+        <div class="tp-modes" id="tpModes">
+          <button data-mode="auto" title="Follow the editor theme">Auto</button>
+          <button data-mode="light">Light</button>
+          <button data-mode="dim">Dim</button>
+          <button data-mode="dark">Dark</button>
+          <button data-mode="contrast">Contrast</button>
+        </div>
+        <p class="tp-label">Accent</p>
+        <div class="tp-accents" id="tpAccents">
+          <button class="sw" data-accent="blue"   style="--sw:#3b82f6" title="Blue" aria-label="Blue"></button>
+          <button class="sw" data-accent="violet" style="--sw:#8b5cf6" title="Violet" aria-label="Violet"></button>
+          <button class="sw" data-accent="teal"   style="--sw:#14b8a6" title="Teal" aria-label="Teal"></button>
+          <button class="sw" data-accent="amber"  style="--sw:#f59e0b" title="Amber" aria-label="Amber"></button>
+          <button class="sw" data-accent="rose"   style="--sw:#f43f5e" title="Rose" aria-label="Rose"></button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="notice partial" id="partialNotice" hidden>
+  <span class="notice-ico"><span class="spinner-sm"></span></span>
+  <div class="notice-body" id="partialBody"></div>
+</div>
+<div class="notice" id="logNotice" hidden>
+  <span class="notice-ico">&#9432;</span>
+  <div class="notice-body"><b>Only request counts were found for these sessions.</b> Token, AI-credit (AIU)
+    &amp; model figures come from fields Copilot Chat writes into its own logs; older sessions get
+    trimmed and debug logs rotate, so only request counts survived. New activity will fill them in.</div>
+  <button class="tbtn" id="logEnableBtn">Diagnostics</button>
+  <button class="notice-x" id="logDismiss" title="Dismiss" aria-label="Dismiss">&times;</button>
+</div>
+
+<nav class="tabs" id="tabs" role="tablist" aria-label="Dashboard views">
+  <button class="tab active" role="tab" aria-selected="true" data-tab="overview">Overview</button>
+  <button class="tab" role="tab" aria-selected="false" data-tab="calendar">Calendar</button>
+  <button class="tab" role="tab" aria-selected="false" data-tab="breakdown">Breakdown</button>
+  <button class="tab" role="tab" aria-selected="false" data-tab="agents">Agents</button>
+  <button class="tab" role="tab" aria-selected="false" data-tab="skills">Skills</button>
+  <button class="tab" role="tab" aria-selected="false" data-tab="strengths">Strengths</button>
+  <button class="tab" role="tab" aria-selected="false" data-tab="forecast">Forecast</button>
+  <button class="tab" role="tab" aria-selected="false" data-tab="diagnostics">Diagnostics <span class="tbadge" id="diagBadge" hidden>0</span></button>
+</nav>
+
+<div id="dashView">
+  <div class="daychip" id="dayChip" hidden></div>
+  <div class="pills">
+    <div class="pill hero"><div class="k">AI Credits (AIU)</div><div class="v" id="pAiu">0</div><div class="s" id="pAiuSub">nano-AIU / 1e9</div></div>
+    <div class="pill cost"><div class="k">Estimated cost</div><div class="v" id="pCost">&mdash;</div><div class="s" id="pCostSub"></div></div>
+    <div class="pill"><div class="k">Requests</div><div class="v" id="pReq">0</div><div class="s">LLM calls</div></div>
+    <div class="pill"><div class="k">Input tokens</div><div class="v" id="pIn">0</div><div class="s" id="pInSub"></div></div>
+    <div class="pill"><div class="k">Output tokens</div><div class="v" id="pOut">0</div><div class="s" id="pOutSub"></div></div>
+    <div class="pill"><div class="k">Projects</div><div class="v" id="pProj">0</div></div>
+    <div class="pill"><div class="k">Active days</div><div class="v" id="pDays">0</div></div>
+  </div>
+  <div class="layout">
+  <aside class="sidebar">
+
+    <section class="section">
+      <header><h2>Date range</h2></header>
+      <div class="section-body">
+        <div class="presets" id="presets">
+          <button data-days="7">7d</button>
+          <button data-days="30">30d</button>
+          <button data-days="90">90d</button>
+          <button data-days="all" class="active">All</button>
+        </div>
+        <div class="drow">
+          <input type="date" id="dFrom"><span>→</span><input type="date" id="dTo">
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <header><h2>Harness</h2>
+        <span class="acts"><span class="act" id="cliAll">all</span><span class="act" id="cliNone">none</span></span>
+      </header>
+      <div class="section-body" id="clientList">
+        <label class="opt"><input type="checkbox" id="cbVs" checked> VS Code
+          <span class="badge" id="badgeVs"></span></label>
+        <label class="opt"><input type="checkbox" id="cbCli" checked> CLI
+          <span class="badge" id="badgeCli"></span></label>
+        <label class="opt"><input type="checkbox" id="cbClaude" checked> Claude Code
+          <span class="badge" id="badgeCla"></span></label>
+      </div>
+    </section>
+
+    <section class="section">
+      <header>
+        <h2>Models used</h2>
+        <span class="acts"><span class="act" id="modelAll">all</span><span class="act" id="modelNone">none</span></span>
+      </header>
+      <div class="section-body">
+        <p class="proj-hint">Untick a model to remove it from <b>every figure</b>, the same way a project does. Sessions are the exception &mdash; one can span several models, so counts read <b>&mdash;</b> while a filter is on.</p>
+        <p class="m-summary" id="mSummary"></p>
+        <div class="mlist" id="mList"></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <header>
+        <h2>Projects</h2>
+        <span class="acts"><span class="act" id="projAll">all</span><span class="act" id="projNone">none</span><span class="act" id="projClear">clear</span></span>
+      </header>
+      <div class="section-body">
+        <input id="projSearch" type="search" placeholder="Filter projects…" autocomplete="off">
+        <p class="proj-hint">Everything is counted by default. <b>Untick to exclude</b> a project from every metric &amp; chart. Search only filters this list.</p>
+        <div class="proj-scroll">
+          <div class="proj-list" id="projBody"></div>
+        </div>
+        <div class="proj-empty" id="projEmpty" hidden>No projects match.</div>
+        <button type="button" class="act proj-reveal" id="projReveal" hidden></button>
+      </div>
+    </section>
+
+  </aside>
+
+  <div class="main">
+
+    <section class="tabpanel active" data-tabpanel="overview">
+      <div class="panel">
+        <h3>AIU credits per day</h3>
+        <div id="dailyChart" class="chart"></div>
+      </div>
+      <div class="panel">
+        <h3>Top projects by AIU</h3>
+        <div id="topChart"></div>
+      </div>
+      <div class="panel">
+        <h3>Per-project breakdown <span class="hint">— click a row for models, agents &amp; tools</span></h3>
+        <div class="ptable-scroll">
+          <table class="ptable">
+            <thead><tr><th>Project</th><th class="num">Sessions</th><th class="num">Requests</th>
+              <th class="num">AIU</th><th class="num cost">Cost</th><th class="num">Input</th><th class="num">Output</th></tr></thead>
+            <tbody id="tblBody"></tbody>
+          </table>
+        </div>
+        <p class="provenance">Credits come from <code>copilotUsageNanoAiu</code> &mdash; GitHub&rsquo;s own figure, not a calculation of ours. What can differ from an
+          official org-level report is <b>coverage</b>: this reads the logs still on this machine, and old ones rotate away.
+          <span class="prov-more">See Diagnostics for what the last scan actually read.</span></p>
+      </div>
+    </section>
+
+    <section class="tabpanel" data-tabpanel="calendar">
+      <div class="panel">
+        <h3>Activity calendar — requests per day</h3>
+        <p class="cal-howto">Darker means more requests that day.
+          <b>Hover</b> a day for its requests, credits, tokens and cost.
+          <b>Click</b> a day to filter the whole dashboard to it.
+          <b>Drag</b> across days to select a range. A chip appears above the charts to take you back.</p>
+        <div id="calChart" class="cal-wrap"></div>
+      </div>
+    </section>
+
+    <section class="tabpanel" data-tabpanel="breakdown">
+      <div class="panel">
+        <h3>Requests by harness</h3>
+        <div id="pieClient"></div>
+      </div>
+      <div class="panel">
+        <h3>AIU by model</h3>
+        <div id="pieModel"></div>
+      </div>
+      <div class="panel">
+        <h3>Top projects by requests</h3>
+        <div id="pieProj"></div>
+      </div>
+      <div class="panel">
+        <h3>Code output by language</h3>
+        <div id="pieLang"></div>
+      </div>
+    </section>
+
+    <section class="tabpanel" data-tabpanel="agents">
+      <div class="panel">
+        <h3>Cost signals <span class="hint">&mdash; biggest AIU spenders to target for reduction</span></h3>
+        <div id="agentSignal"></div>
+      </div>
+      <div class="panel">
+        <h3>Most expensive agents <span class="hint">&mdash; ranked by total AIU within each group: <b>base</b> chat/CLI/Claude agents vs <b>subagents</b> launched via <code>runSubagent</code>. Click a row for its model breakdown. An invocation = one LLM request.</span></h3>
+        <div class="ptable-scroll">
+          <table class="ptable">
+            <thead><tr><th>Agent</th><th class="num">Requests</th><th class="num">Total AIU</th>
+              <th class="num">AIU / request</th><th class="num">Input</th><th class="num">Output</th></tr></thead>
+            <tbody id="agentBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>AIU by agent</h3>
+        <div id="pieAgent"></div>
+      </div>
+    </section>
+
+    <section class="tabpanel" data-tabpanel="skills">
+      <div class="panel">
+        <h3>Skills used <span class="hint">&mdash; SKILL.md reads in VS Code; each read = one invocation. AIU/tokens are the summed totals of every session that invoked the skill (a session counts toward each skill it used). Recent VS Code sessions only.</span></h3>
+        <div class="ptable-scroll">
+          <table class="ptable">
+            <thead><tr><th>Skill</th><th class="num">Invocations</th><th class="num">Sessions</th>
+              <th class="num">AIU</th><th class="num">AIU / session</th><th class="num">Input</th><th class="num">Output</th></tr></thead>
+            <tbody id="skillBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Invocations by skill</h3>
+        <div id="pieSkill"></div>
+      </div>
+    </section>
+
+    <section class="tabpanel" data-tabpanel="strengths">
+      <div class="panel">
+        <h3>Your strengths <span class="hint">&mdash; productivity signals from recorded activity in scope: most-used model/agent, output volume, editing effort and turns-to-completion.</span></h3>
+        <div id="stView"></div>
+      </div>
+    </section>
+
+    <section class="tabpanel" data-tabpanel="forecast">
+      <div class="panel">
+        <h3>Usage forecast <span class="hint">&mdash; linear projection from recorded AIU in the selected range; labelled estimates, not recorded values. Set <code>budget.monthlyAiu</code> in Config to compare.</span></h3>
+        <div id="fcView"></div>
+      </div>
+    </section>
+
+    <section class="tabpanel" data-tabpanel="diagnostics">
+      <div class="panel">
+        <h3>How these numbers compare to GitHub&rsquo;s</h3>
+        <p class="provenance">Every credit shown comes from <code>copilotUsageNanoAiu</code>, the field GitHub itself writes into your local
+          logs. It is not an estimate and not a reconstruction from token prices, so a request that appears here carries the same credit
+          value GitHub recorded for it.</p>
+        <p class="provenance">The total can still sit below an official report, and the reason is coverage rather than arithmetic.
+          VS Code rotates its debug logs and trims request bodies out of older sessions; the Copilot CLI only began recording per-request
+          billing in July; Claude Code never reports credits at all. Anything already discarded cannot be counted, and nothing is invented
+          to fill the gap. The authoritative totals live behind GitHub&rsquo;s billing and metrics APIs, which need organisation-owner or
+          enterprise-admin access &mdash; unavailable to an individual account, including an enterprise-managed one.</p>
+        <p class="provenance">Treat this as a complete picture of what your machine still remembers, and a floor rather than a bill.</p>
+      </div>
+      <div class="panel">
+        <h3>Scan health <span class="hint">&mdash; what the last scan actually read, skipped and failed on. Nothing here is swallowed silently.</span></h3>
+        <div class="pills" id="diagPills"></div>
+      </div>
+      <div class="panel">
+        <h3>Requests with no token data <span class="hint">&mdash; real calls whose source never wrote down their size. This is why some projects show requests but no credits.</span></h3>
+        <div id="diagCoverage"></div>
+      </div>
+      <div class="panel">
+        <h3>Sources read</h3>
+        <div id="diagSources"></div>
+      </div>
+      <div class="panel">
+        <h3>Read &amp; parse failures</h3>
+        <div id="diagErrors"></div>
+      </div>
+      <div class="panel">
+        <h3>Known limitations of local extraction</h3>
+        <ul class="diag-limits">
+          <li><b>Claude Code has no AI credits.</b> It records real tokens, but GitHub's AIU metric does not exist there, so its credit total is always 0.</li>
+          <li><b>Chat-picker agent personas are not recorded.</b> They fold into &ldquo;GitHub Copilot Chat&rdquo;. Only subagents launched through <code>runSubagent</code> write their own logs and can be attributed.</li>
+          <li><b>Skill and agent attribution reaches back less far than requests.</b> VS Code keeps only its most recent sessions in <code>session-store.db</code>; older ones are purged by VS Code, not by this tool.</li>
+          <li><b>Model, agent and skill breakdowns are lifetime totals.</b> GitHub's per-day telemetry carries no model or agent dimension, so the date range cannot re-scope them.</li>
+          <li><b>A session that used several skills counts its tokens toward each of them.</b> Per-skill totals therefore overlap and do not sum to the grand total.</li>
+          <li><b>Debug logs rotate.</b> Older history is reconstructed from trimmed <code>chatSessions</code>, which retain fewer requests per session &mdash; so early days look sparse.</li>
+        </ul>
+        <div class="cfg-actions">
+          <button class="tbtn" id="diagCopy">Copy diagnostics JSON</button>
+          <span class="cfg-status" id="diagStatus"></span>
+        </div>
+      </div>
+    </section>
+    </div>
+  </div>
+</div>
+
+<section class="cfgview" id="cfgView" hidden>
+  <div class="panel">
+    <h3>Quick settings</h3>
+    <p class="cfg-help">The three settings people actually change. They write straight into the JSON below &mdash; edit either one.</p>
+    <div class="cfg-form">
+      <label>Start date
+        <input type="date" id="qsSince">
+        <span class="cfg-hint">Ignore everything before this day. Useful when a plan or credit model changed on a known date. Empty = all recorded history.</span>
+      </label>
+      <label>End date
+        <input type="date" id="qsUntil">
+        <span class="cfg-hint">Ignore everything after this day. Empty = up to the latest recorded day.</span>
+      </label>
+      <label>Cost per AI credit (USD)
+        <input type="number" id="qsCost" min="0" step="0.001" placeholder="not set">
+        <span class="cfg-hint">Turns on every cost figure. Your rate &times; recorded credits &mdash; a projection, not a bill. No rate is detectable locally, so nothing is shown until you set one.</span>
+      </label>
+      <label>Monthly budget (AIU)
+        <input type="number" id="qsBudget" min="0" step="1" placeholder="not set">
+        <span class="cfg-hint">Drives the Forecast tab's over/under comparison.</span>
+      </label>
+      <label>Auto-refresh (minutes)
+        <input type="number" id="qsAuto" min="0" step="1">
+        <span class="cfg-hint">0 = off. Inside the VS Code extension this re-scans your logs live.</span>
+      </label>
+      <label class="cfg-check"><span><input type="checkbox" id="qsHideEmpty"> Hide projects with no recorded tokens</span>
+        <span class="cfg-hint">Sessions that never reached a model, and trimmed logs that kept only a request count, leave behind projects with no credits and no tokens. On = they start unticked and sit behind a &ldquo;show&rdquo; link in the sidebar. They are never deleted &mdash; tick one and it counts again.</span>
+      </label>
+      <label class="cfg-check"><span><input type="checkbox" id="qsDiag"> Show the Diagnostics tab</span>
+        <span class="cfg-hint">Scan coverage, parse failures and the per-project breakdown of requests that carry no token payload. Useful when a number looks wrong; noise the rest of the time.</span>
+      </label>
+    </div>
+    <div class="cfg-actions">
+      <button class="tbtn primary" id="qsApply">Save settings</button>
+      <span class="cfg-status" id="qsStatus"></span>
+    </div>
+  </div>
+  <div class="panel">
+    <h3>Config &amp; hard filters</h3>
+    <p class="cfg-help">These exclusions are a <b>hard filter</b>: matching data is removed from the dashboard entirely and disappears from the sidebar &mdash; the sidebar checkboxes only narrow whatever is left. Saved in this browser (localStorage), so it survives reloads. Edit the JSON and click <b>Apply</b>, or <b>Download config.json</b> to bake defaults into the Python generator.</p>
+    <textarea id="cfgJson" class="cfg-json" spellcheck="false"></textarea>
+    <div class="cfg-actions">
+      <button class="tbtn" id="cfgApply">Apply</button>
+      <button class="tbtn" id="cfgReset">Reset</button>
+      <button class="tbtn" id="cfgDownload">Download config.json</button>
+      <span class="cfg-status" id="cfgStatus"></span>
+    </div>
+    <p class="cfg-note"><b>Fully honoured</b> (re-scopes every number): <code>since</code>, <code>until</code> (YYYY-MM-DD), <code>exclude.projects</code> (case-insensitive substring), <code>exclude.project_prefixes</code> (starts-with), <code>exclude.clients</code> (<code>vscode</code> / <code>cli</code> / <code>claude</code>).<br><b>Breakdown-only</b>: <code>exclude.agents</code> filters the agent panels but cannot re-scope the daily totals, because GitHub's per-day telemetry carries no agent. <code>exclude.models</code> is a hard filter and does re-scope everything, since the logs do record a model per request.<br><b>Cost</b>: <code>cost.usdPerAiu</code> (omitted / 0 = every cost figure hidden). GitHub does not publish a machine-readable credit price and none is recorded locally, so costs are only ever <i>your configured rate &times; recorded credits</i> &mdash; a projection, never an invoice.<br><b>Auto-refresh</b>: <code>autoRefreshMinutes</code> (0 = off). Inside the VS Code extension this re-scans your logs live on that interval; in a plain browser it reloads the report.<br><b>Forecast budget</b>: <code>budget.monthlyAiu</code> (0 / omitted = no budget) drives the Forecast tab's budget comparison; with no budget it shows projected charges only.<br><b>Default view</b>: <code>hideEmptyProjects</code> (default <code>true</code>) starts projects that never recorded a token or a credit unticked and tucks them behind a link in the sidebar &mdash; they are hidden, never discarded. <code>show.diagnostics</code> (default <code>true</code>) controls whether the Diagnostics tab is offered at all.</p>
+  </div>
+</section>
+
+<script><!--@main-js--></script>
+</body>
+</html>

@@ -14,141 +14,16 @@ future refactors must preserve:
 """
 from __future__ import annotations
 
-import datetime
-import json
-import os
-import sqlite3
-
 import pytest
 
+import synthetic
 import usage
-
-
-def _ms(y: int, m: int, d: int, hh: int = 12) -> int:
-    return int(datetime.datetime(y, m, d, hh, tzinfo=datetime.timezone.utc)
-               .timestamp() * 1000)
-
-
-DAY0, DAY1, DAY2 = "2026-05-01", "2026-05-02", "2026-05-03"
-
-
-def _write(path: str, text: str) -> None:
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as fh:
-        fh.write(text)
-
-
-def _billing_line(day_ms: int, in_: int, out: int, model: str, nano: int | None) -> str:
-    attrs: dict = {"inputTokens": in_, "outputTokens": out, "model": model}
-    if nano is not None:
-        attrs["copilotUsageNanoAiu"] = nano
-    return json.dumps({"type": "llm_request", "ts": day_ms, "attrs": attrs})
-
-
-def _build_vscode(root: str, db_path: str) -> None:
-    ws = os.path.join(root, "ws1")
-    _write(os.path.join(ws, "workspace.json"),
-           json.dumps({"folder": "file:///C:/proj/alpha"}))
-    dbg = os.path.join(ws, "GitHub.copilot-chat", "debug-logs")
-
-    # s1: two billing events (day1) + one tool_call, no children
-    _write(os.path.join(dbg, "s1", "main.jsonl"),
-           _billing_line(_ms(2026, 5, 2), 100, 20, "gpt-x", 5_000_000_000) + "\n"
-           + _billing_line(_ms(2026, 5, 2), 200, 40, "gpt-x", 3_000_000_000) + "\n"
-           + json.dumps({"type": "tool_call", "attrs": {"name": "read_file"}}) + "\n")
-
-    # s2: one billing event (day1) + a child_session_ref to a runSubagent log
-    _write(os.path.join(dbg, "s2", "main.jsonl"),
-           _billing_line(_ms(2026, 5, 2), 50, 10, "gpt-x", 1_000_000_000) + "\n"
-           + json.dumps({"type": "child_session_ref",
-                         "attrs": {"childLogFile": "runSubagent-Researcher-c1.jsonl",
-                                   "label": "runSubagent-Researcher"}}) + "\n")
-    # subagent child log (day2, different model) -> agent "Researcher"
-    _write(os.path.join(dbg, "s2", "runSubagent-Researcher-c1.jsonl"),
-           _billing_line(_ms(2026, 5, 3), 500, 100, "claude", 2_000_000_000) + "\n")
-
-    # chatSessions: s1 must be SKIPPED (already in debug-logs); s3 is new/older
-    chat = os.path.join(ws, "chatSessions")
-    _write(os.path.join(chat, "s1.json"), json.dumps({
-        "sessionId": "s1",
-        "requests": [{"timestamp": _ms(2026, 5, 2), "promptTokens": 9999,
-                      "completionTokens": 9999, "copilotCredits": 99.0,
-                      "modelId": "copilot/gpt-x"}]}))
-    _write(os.path.join(chat, "s3.json"), json.dumps({
-        "sessionId": "s3", "creationDate": _ms(2026, 5, 1),
-        "requests": [{"timestamp": _ms(2026, 5, 1), "promptTokens": 10,
-                      "completionTokens": 2, "copilotCredits": 0.5,
-                      "modelId": "copilot/gpt-x"}]}))
-
-    conn = sqlite3.connect(db_path)
-    conn.execute("CREATE TABLE sessions (id TEXT, repository TEXT, agent_name TEXT, cwd TEXT)")
-    conn.executemany(
-        "INSERT INTO sessions (id, repository, agent_name, cwd) VALUES (?,?,?,?)",
-        [("s1", "https://github.com/acme/alpha", None, ""),
-         ("s2", "https://github.com/acme/alpha", None, ""),
-         ("s3", "https://github.com/acme/alpha", None, "")])
-    conn.execute("CREATE TABLE session_files "
-                 "(id INTEGER, session_id TEXT, file_path TEXT, tool_name TEXT, turn_index INTEGER)")
-    conn.execute(
-        "INSERT INTO session_files (id, session_id, file_path) VALUES (?,?,?)",
-        (1, "s1", "C:/x/skills/web-artifacts-builder/SKILL.md"))
-    conn.commit()
-    conn.close()
-
-
-def _build_cli(db_path: str) -> None:
-    conn = sqlite3.connect(db_path)
-    conn.execute("CREATE TABLE sessions (id TEXT, repository TEXT, cwd TEXT, created_at TEXT)")
-    conn.executemany(
-        "INSERT INTO sessions (id, repository, cwd, created_at) VALUES (?,?,?,?)",
-        [("cs1", "https://github.com/acme/beta", "", "2026-07-10T09:00:00Z"),
-         ("cs2", "https://github.com/acme/beta", "", "2026-07-05T09:00:00Z")])
-    conn.execute("CREATE TABLE assistant_usage_events "
-                 "(session_id TEXT, input_tokens INT, output_tokens INT, "
-                 "total_nano_aiu INT, model TEXT, created_at TEXT)")
-    conn.execute(
-        "INSERT INTO assistant_usage_events VALUES (?,?,?,?,?,?)",
-        ("cs1", 1000, 200, 4_000_000_000, "gpt-cli", "2026-07-10T09:00:00Z"))
-    conn.execute("CREATE TABLE turns (session_id TEXT, timestamp TEXT)")
-    conn.executemany(
-        "INSERT INTO turns VALUES (?,?)",
-        [("cs1", "2026-07-10T09:05:00Z"),   # same day as real -> skipped
-         ("cs2", "2026-07-05T09:05:00Z")])  # pre-telemetry -> recovered
-    conn.commit()
-    conn.close()
-
-
-def _build_claude(root: str) -> None:
-    line = json.dumps({
-        "type": "assistant",
-        "message": {"model": "claude-3",
-                    "usage": {"input_tokens": 100, "cache_creation_input_tokens": 10,
-                              "cache_read_input_tokens": 5, "output_tokens": 20}},
-        "timestamp": "2026-06-01T10:00:00Z", "cwd": "C:/proj/gamma"})
-    _write(os.path.join(root, "gammaproj", "sess.jsonl"), line + "\n")
+from synthetic import DAY0, DAY1, DAY2
 
 
 @pytest.fixture()
 def projects(tmp_path, monkeypatch):
-    vs_root = tmp_path / "vs"
-    vs_db = tmp_path / "vs.db"
-    cli_home = tmp_path / "cli"
-    claude_root = tmp_path / "claude"
-    cli_home.mkdir()
-    _build_vscode(str(vs_root), str(vs_db))
-    _build_cli(str(cli_home / "session-store.db"))
-    _build_claude(str(claude_root))
-
-    monkeypatch.setattr(usage, "VS_ROOT", str(vs_root))
-    monkeypatch.setattr(usage, "VS_DB", str(vs_db))
-    monkeypatch.setattr(usage, "CLI_HOME", str(cli_home))
-    monkeypatch.setattr(usage, "CLAUDE_ROOT", str(claude_root))
-    monkeypatch.setattr(usage, "CACHE", str(tmp_path / "cache.json"))
-
-    vs = usage.scan_vscode()
-    cli = usage.scan_cli()
-    claude = usage.scan_claude()
-    return {p["name"]: p for p in usage.build_projects(vs, cli, claude)}
+    return {p["name"]: p for p in synthetic.scan(tmp_path, monkeypatch)}
 
 
 def _sum(dim: dict, field: str) -> float:
@@ -158,7 +33,7 @@ def _sum(dim: dict, field: str) -> float:
 def _assert_cross_dim_invariant(client: dict) -> None:
     """The core no-double-count guard: every dimension must total the same AIU."""
     a = round(_sum(client["by_day"], "aiu"), 4)
-    for dim in ("by_model", "by_agent", "by_am"):
+    for dim in ("by_model", "by_agent", "by_am", "by_dm"):
         assert round(_sum(client[dim], "aiu"), 4) == a, dim
     # and by_am must re-sum to by_agent + by_model per key
     ag: dict = {}
@@ -171,6 +46,21 @@ def _assert_cross_dim_invariant(client: dict) -> None:
         assert round(v, 4) == round(client["by_agent"][agent]["aiu"], 4)
     for model, v in md.items():
         assert round(v, 4) == round(client["by_model"][model]["aiu"], 4)
+    # by_dm is what lets a model filter re-scope the day figures, so it has to
+    # decompose cleanly along BOTH of its axes -- per date and per model.
+    dd: dict = {}
+    dmd: dict = {}
+    for key, b in client["by_dm"].items():
+        date, model = key.split(usage._AM_SEP, 1)
+        dd[date] = dd.get(date, 0.0) + b["aiu"]
+        dmd[model] = dmd.get(model, 0.0) + b["aiu"]
+    for date, v in dd.items():
+        assert round(v, 4) == round(client["by_day"][date]["aiu"], 4), date
+    for model, v in dmd.items():
+        assert round(v, 4) == round(client["by_model"][model]["aiu"], 4), model
+    # requests must decompose too -- the token-less floors live only here
+    r = _sum(client["by_day"], "requests")
+    assert _sum(client["by_dm"], "requests") == r
 
 
 class TestSynthetic:
@@ -210,6 +100,18 @@ class TestSynthetic:
     def test_tool_counts(self, projects):
         vs = projects["acme/alpha"]["vscode"]
         assert vs["by_tool"]["read_file"] == 1
+
+    def test_session_activity_preserves_session_date_model_membership(self, projects):
+        vs = projects["acme/alpha"]["vscode"]
+        facts = {tuple(key.split(usage._AM_SEP)): count
+                 for key, count in vs["by_sdm"].items()}
+        assert facts == {
+            ("s1", DAY1, "gpt-x"): 1,
+            ("s2", DAY1, "gpt-x"): 1,
+            ("s2", DAY2, "claude"): 1,
+            ("s3", DAY0, "gpt-x"): 1,
+        }
+        assert len({session for session, _, _ in facts}) == 3
 
     def test_cli_totals(self, projects):
         cli = projects["acme/beta"]["cli"]

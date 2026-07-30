@@ -5,8 +5,14 @@ const path = require("path");
 
 const repo = path.resolve(__dirname, "..", ".."); // extension/scripts -> extension -> repo root
 const dest = path.resolve(__dirname, "..", "py");
-const files = ["usage.py", "dashboard_template.py"];
-const packages = ["ghcp"]; // pure-helper package imported by usage.py
+const files = ["usage.py", "build_dashboard.py"];
+// ghcp: pure-helper package imported by usage.py
+// web:  css/html/js the dashboard template assembles at import time
+const packages = [
+  { name: "ghcp", required: true },
+  { name: "web", required: false }
+];
+const skipDirs = new Set(["__pycache__", "out", ".cache"]);
 
 fs.mkdirSync(dest, { recursive: true });
 for (const f of files) {
@@ -19,20 +25,34 @@ for (const f of files) {
   console.log(`bundle: ${f} -> py/${f}`);
 }
 
-for (const pkg of packages) {
-  const srcDir = path.join(repo, pkg);
-  if (!fs.existsSync(srcDir)) {
-    console.error(`bundle: missing package ${srcDir}`);
-    process.exit(1);
-  }
-  const destDir = path.join(dest, pkg);
+function copyDir(srcDir, destDir, label) {
   fs.mkdirSync(destDir, { recursive: true });
-  for (const f of fs.readdirSync(srcDir)) {
-    if (!f.endsWith(".py")) {
+  for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      if (skipDirs.has(entry.name)) {
+        continue;
+      }
+      copyDir(path.join(srcDir, entry.name), path.join(destDir, entry.name),
+              `${label}/${entry.name}`);
       continue;
     }
-    fs.copyFileSync(path.join(srcDir, f), path.join(destDir, f));
-    console.log(`bundle: ${pkg}/${f} -> py/${pkg}/${f}`);
+    if (entry.name.endsWith(".pyc")) {
+      continue;
+    }
+    fs.copyFileSync(path.join(srcDir, entry.name), path.join(destDir, entry.name));
+    console.log(`bundle: ${label}/${entry.name} -> py/${label}/${entry.name}`);
   }
+}
+
+for (const pkg of packages) {
+  const srcDir = path.join(repo, pkg.name);
+  if (!fs.existsSync(srcDir)) {
+    if (pkg.required) {
+      console.error(`bundle: missing package ${srcDir}`);
+      process.exit(1);
+    }
+    continue;
+  }
+  copyDir(srcDir, path.join(dest, pkg.name), pkg.name);
 }
 

@@ -50,6 +50,12 @@ def _norm_agent(name) -> str:
 
 def _norm_model(model: str) -> str:
     """Normalise a chatSessions modelId ('copilot/claude-opus-4.8') to the bare
-    name debug-logs use ('claude-opus-4.8')."""
-    m = str(model or "?")
+    name debug-logs use ('claude-opus-4.8').
+
+    Raises on a missing name rather than inventing one: a request attributed to
+    a model nobody chose is worse than a request we are told we could not read.
+    """
+    if not model:
+        raise ValueError("request carries no model name")
+    m = str(model)
     return m.split("/", 1)[1] if m.startswith("copilot/") else m

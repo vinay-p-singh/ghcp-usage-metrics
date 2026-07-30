@@ -2,7 +2,7 @@
   "name": "ghcp-usage-metrics",
   "displayName": "GHCP Usage Metrics",
   "description": "Local dashboard of your GitHub Copilot token & AI-credit (AIU) usage per project, model, harness, agent, skill and day, with cost ranking, strengths and forecasting. Runs the bundled Python extractor (usage.py) and hosts its report in a webview. Refresh re-scans your logs live. Nothing leaves your machine.",
-  "version": "0.3.9",
+  "version": "1.0.0",
   "publisher": "local",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -57,6 +57,12 @@
           "type": "string",
           "default": "",
           "description": "Folder containing usage.py. Empty = auto-detect from the open workspace folders, then the parent folder of this extension, then the bundled copy."
+        },
+        "ghcpUsage.quickScanDays": {
+          "type": "number",
+          "default": 10,
+          "minimum": 1,
+          "description": "On a first run with no previous report, scan only logs from the last N days so the dashboard appears quickly. The complete history is then loaded in the background."
         }
       }
     }
@@ -67,7 +73,7 @@
     "watch": "tsc -watch -p ./",
     "bundle": "node scripts/bundle.js",
     "check-version": "node scripts/check-version.js",
-    "package": "npm run bundle && npx --yes @vscode/vsce package --allow-missing-repository"
+    "package": "node scripts/clean-vsix.js && npm run bundle && npx --yes @vscode/vsce package --allow-missing-repository"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

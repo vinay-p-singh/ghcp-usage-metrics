@@ -42,13 +42,32 @@
       "presentation": { "reveal": "always", "panel": "shared", "clear": true }
     },
     {
+      "label": "Run JS tests",
+      "type": "process",
+      "command": "node",
+      "args": ["--test", "tests/js/*.test.js"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "group": "test",
+      "detail": "Unit tests for the pure dashboard helpers in web/js/00-lib.js."
+    },
+    {
       "label": "Sync skill bundle",
       "type": "process",
       "command": "python",
       "args": ["scripts/bundle_skill.py"],
       "options": { "cwd": "${workspaceFolder}" },
       "problemMatcher": [],
-      "detail": "Refresh the copy of the extractor inside skills/ghcp-usage-metrics/."
+      "detail": "Copy usage.py, build_dashboard.py, ghcp/ and web/ into skills/ and ~/.copilot/skills/."
+    },
+    {
+      "label": "Check bundle sync",
+      "type": "process",
+      "command": "python",
+      "args": ["scripts/bundle_skill.py", "--check"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "detail": "Report any copy that has drifted from the source, without changing anything."
     },
     {
       "label": "Bundle Python into extension",
@@ -81,17 +100,17 @@
       "label": "Install extension (.vsix)",
       "type": "shell",
       "windows": {
-        "command": "code --install-extension (Get-ChildItem '${workspaceFolder}/extension/*.vsix' | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName --force"
+        "command": "code --uninstall-extension local.ghcp-usage-metrics 2>$null; code --install-extension (Get-ChildItem '${workspaceFolder}/extension/*.vsix' | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName --force; $keep = ((Get-Content \"$HOME/.vscode/extensions/extensions.json\" -Raw | ConvertFrom-Json) | Where-Object { $_.identifier.id -eq 'local.ghcp-usage-metrics' }).location.path -replace '.*/',''; Get-ChildItem \"$HOME/.vscode/extensions\" -Directory -Filter 'local.ghcp-usage-metrics-*' | Where-Object { $_.Name -ne $keep } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue"
       },
       "linux": {
-        "command": "code --install-extension \"$(ls -t ${workspaceFolder}/extension/*.vsix | head -n1)\" --force"
+        "command": "code --uninstall-extension local.ghcp-usage-metrics || true; code --install-extension \"$(ls -t ${workspaceFolder}/extension/*.vsix | head -n1)\" --force"
       },
       "osx": {
-        "command": "code --install-extension \"$(ls -t ${workspaceFolder}/extension/*.vsix | head -n1)\" --force"
+        "command": "code --uninstall-extension local.ghcp-usage-metrics || true; code --install-extension \"$(ls -t ${workspaceFolder}/extension/*.vsix | head -n1)\" --force"
       },
       "problemMatcher": [],
       "presentation": { "reveal": "always", "panel": "shared" },
-      "detail": "Install the most recently built .vsix into VS Code."
+      "detail": "Uninstall any existing build first, then install the newest .vsix. Installing over the top leaves one orphaned folder per version, and after a downgrade VS Code can load the wrong one."
     },
     {
       "label": "Build, package & install extension",

@@ -1,0 +1,12 @@
+{
+  "name": "ghcp-usage-metrics-tests",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Test-only npm project. The extractor and dashboard ship with no dependencies; jsdom is used solely to exercise the dashboard's interactive code in tests, exactly as pytest is used for Python.",
+  "scripts": {
+    "test": "node --test \"tests/js/*.test.js\""
+  },
+  "devDependencies": {
+    "jsdom": "^26.1.0"
+  }
+}

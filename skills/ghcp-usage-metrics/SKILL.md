@@ -17,7 +17,7 @@ if a question genuinely has no matching subcommand.
 ## Where to run it
 
 This folder is self-contained: it carries the extractor (`usage.py`, `ghcp/`,
-`dashboard_template.py`) alongside the instructions and the query CLI. Run every
+`build_dashboard.py`) alongside the instructions and the query CLI. Run every
 command below from this folder, and the artifacts land in `out/` beside them.
 Python 3 with no third-party packages is the only requirement.
 
@@ -88,9 +88,9 @@ extrapolate past what it reports.
   recent 70 sessions in its session store, so older runs are purged and
   unrecoverable. Skill invocation counts are exact for the sessions that
   survived, not for all time.
-- **Model, agent and skill breakdowns are lifetime**, not date-filtered — the
-  per-day buckets carry no model or agent dimension. `--since` / `--until` change
-  the day-based numbers only, and `query.py` prints a reminder when it matters.
+- **Agent and skill breakdowns are lifetime**, not date-filtered — the per-day
+  buckets carry no agent or skill dimension. Models are dated and do follow
+  `--since` / `--until`; `query.py` prints a reminder when it matters.
 - **Skill AIU overlaps.** A session that used three skills counts its tokens
   toward all three, so skill AIU does not sum to the total.
 - **No cloud fallback.** Enterprise-managed accounts cannot reach GitHub's org
@@ -99,3 +99,7 @@ extrapolate past what it reports.
 - **Harness coverage varies by platform.** VS Code data is read from the
   platform's own user directory, Copilot CLI from `~/.copilot`, and Claude Code
   from `~/.claude`. A harness the user never ran simply contributes nothing.
+- **`query.py` sees more projects than the dashboard shows.** The dashboard
+  hides projects that never recorded a token or a credit, so its project count
+  is lower by design. The JSON keeps them all. If a count here disagrees with
+  the screen, that is why — say so rather than treating either as wrong.

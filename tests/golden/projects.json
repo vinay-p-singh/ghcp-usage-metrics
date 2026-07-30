@@ -1,0 +1,308 @@
+[
+  {
+    "claude": {
+      "by_agent": {},
+      "by_am": {},
+      "by_day": {},
+      "by_dm": {},
+      "by_lang": {},
+      "by_model": {},
+      "by_sdm": {},
+      "by_skill": {},
+      "by_tool": {}
+    },
+    "cli": {
+      "by_agent": {},
+      "by_am": {},
+      "by_day": {},
+      "by_dm": {},
+      "by_lang": {},
+      "by_model": {},
+      "by_sdm": {},
+      "by_skill": {},
+      "by_tool": {}
+    },
+    "name": "acme/alpha",
+    "vscode": {
+      "by_agent": {
+        "GitHub Copilot Chat": {
+          "aiu": 9.5,
+          "in": 360,
+          "out": 72,
+          "requests": 4
+        },
+        "Researcher": {
+          "aiu": 2.0,
+          "in": 500,
+          "out": 100,
+          "requests": 1
+        }
+      },
+      "by_am": {
+        "GitHub Copilot Chat\u001fgpt-x": {
+          "aiu": 9.5,
+          "in": 360,
+          "out": 72,
+          "requests": 4
+        },
+        "Researcher\u001fclaude": {
+          "aiu": 2.0,
+          "in": 500,
+          "out": 100,
+          "requests": 1
+        }
+      },
+      "by_day": {
+        "2026-05-01": {
+          "aiu": 0.5,
+          "in": 10,
+          "out": 2,
+          "requests": 1,
+          "sessions": 1
+        },
+        "2026-05-02": {
+          "aiu": 9.0,
+          "in": 350,
+          "out": 70,
+          "requests": 3,
+          "sessions": 2
+        },
+        "2026-05-03": {
+          "aiu": 2.0,
+          "in": 500,
+          "out": 100,
+          "requests": 1,
+          "sessions": 0
+        }
+      },
+      "by_dm": {
+        "2026-05-01\u001fgpt-x": {
+          "aiu": 0.5,
+          "in": 10,
+          "out": 2,
+          "requests": 1
+        },
+        "2026-05-02\u001fgpt-x": {
+          "aiu": 9.0,
+          "in": 350,
+          "out": 70,
+          "requests": 3
+        },
+        "2026-05-03\u001fclaude": {
+          "aiu": 2.0,
+          "in": 500,
+          "out": 100,
+          "requests": 1
+        }
+      },
+      "by_lang": {},
+      "by_model": {
+        "claude": {
+          "aiu": 2.0,
+          "in": 500,
+          "out": 100,
+          "requests": 1
+        },
+        "gpt-x": {
+          "aiu": 9.5,
+          "in": 360,
+          "out": 72,
+          "requests": 4
+        }
+      },
+      "by_sdm": {
+        "s1\u001f2026-05-02\u001fgpt-x": 1,
+        "s2\u001f2026-05-02\u001fgpt-x": 1,
+        "s2\u001f2026-05-03\u001fclaude": 1,
+        "s3\u001f2026-05-01\u001fgpt-x": 1
+      },
+      "by_skill": {
+        "web-artifacts-builder": {
+          "aiu": 8.0,
+          "in": 300,
+          "out": 60,
+          "reads": 1,
+          "requests": 2,
+          "sessions": 1
+        }
+      },
+      "by_tool": {
+        "read_file": 1
+      }
+    }
+  },
+  {
+    "claude": {
+      "by_agent": {},
+      "by_am": {},
+      "by_day": {},
+      "by_dm": {},
+      "by_lang": {},
+      "by_model": {},
+      "by_sdm": {},
+      "by_skill": {},
+      "by_tool": {}
+    },
+    "cli": {
+      "by_agent": {
+        "Copilot CLI": {
+          "aiu": 4.0,
+          "in": 1000,
+          "out": 200,
+          "requests": 2
+        }
+      },
+      "by_am": {
+        "Copilot CLI\u001f(no token data)": {
+          "aiu": 0.0,
+          "in": 0,
+          "out": 0,
+          "requests": 1
+        },
+        "Copilot CLI\u001fgpt-cli": {
+          "aiu": 4.0,
+          "in": 1000,
+          "out": 200,
+          "requests": 1
+        }
+      },
+      "by_day": {
+        "2026-07-05": {
+          "aiu": 0.0,
+          "in": 0,
+          "out": 0,
+          "requests": 1,
+          "sessions": 1
+        },
+        "2026-07-10": {
+          "aiu": 4.0,
+          "in": 1000,
+          "out": 200,
+          "requests": 1,
+          "sessions": 1
+        }
+      },
+      "by_dm": {
+        "2026-07-05\u001f(no token data)": {
+          "aiu": 0.0,
+          "in": 0,
+          "out": 0,
+          "requests": 1
+        },
+        "2026-07-10\u001fgpt-cli": {
+          "aiu": 4.0,
+          "in": 1000,
+          "out": 200,
+          "requests": 1
+        }
+      },
+      "by_lang": {},
+      "by_model": {
+        "(no token data)": {
+          "aiu": 0.0,
+          "in": 0,
+          "out": 0,
+          "requests": 1
+        },
+        "gpt-cli": {
+          "aiu": 4.0,
+          "in": 1000,
+          "out": 200,
+          "requests": 1
+        }
+      },
+      "by_sdm": {
+        "cs1\u001f2026-07-10\u001fgpt-cli": 1,
+        "cs2\u001f2026-07-05\u001f(no token data)": 1
+      },
+      "by_skill": {},
+      "by_tool": {}
+    },
+    "name": "acme/beta",
+    "vscode": {
+      "by_agent": {},
+      "by_am": {},
+      "by_day": {},
+      "by_dm": {},
+      "by_lang": {},
+      "by_model": {},
+      "by_sdm": {},
+      "by_skill": {},
+      "by_tool": {}
+    }
+  },
+  {
+    "claude": {
+      "by_agent": {
+        "Claude Code": {
+          "aiu": 0.0,
+          "in": 115,
+          "out": 20,
+          "requests": 1
+        }
+      },
+      "by_am": {
+        "Claude Code\u001fclaude-3": {
+          "aiu": 0.0,
+          "in": 115,
+          "out": 20,
+          "requests": 1
+        }
+      },
+      "by_day": {
+        "2026-06-01": {
+          "aiu": 0.0,
+          "in": 115,
+          "out": 20,
+          "requests": 1,
+          "sessions": 1
+        }
+      },
+      "by_dm": {
+        "2026-06-01\u001fclaude-3": {
+          "aiu": 0.0,
+          "in": 115,
+          "out": 20,
+          "requests": 1
+        }
+      },
+      "by_lang": {},
+      "by_model": {
+        "claude-3": {
+          "aiu": 0.0,
+          "in": 115,
+          "out": 20,
+          "requests": 1
+        }
+      },
+      "by_sdm": {
+        "sess\u001f2026-06-01\u001fclaude-3": 1
+      },
+      "by_skill": {},
+      "by_tool": {}
+    },
+    "cli": {
+      "by_agent": {},
+      "by_am": {},
+      "by_day": {},
+      "by_dm": {},
+      "by_lang": {},
+      "by_model": {},
+      "by_sdm": {},
+      "by_skill": {},
+      "by_tool": {}
+    },
+    "name": "gamma",
+    "vscode": {
+      "by_agent": {},
+      "by_am": {},
+      "by_day": {},
+      "by_dm": {},
+      "by_lang": {},
+      "by_model": {},
+      "by_sdm": {},
+      "by_skill": {},
+      "by_tool": {}
+    }
+  }
+]

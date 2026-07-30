@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import datetime
 import os
+from collections import defaultdict
+
+import pytest
 
 import usage
 
@@ -111,9 +114,13 @@ class TestNormModel:
     def test_bare_name_kept(self):
         assert usage._norm_model("gpt-4.1") == "gpt-4.1"
 
-    def test_falsy_becomes_placeholder(self):
-        assert usage._norm_model("") == "?"
-        assert usage._norm_model(None) == "?"
+    def test_falsy_is_refused_rather_than_renamed(self):
+        # A model name we were never given is a fact worth surfacing, not a hole
+        # to plug with "?" -- see INV-27.
+        with pytest.raises(ValueError):
+            usage._norm_model("")
+        with pytest.raises(ValueError):
+            usage._norm_model(None)
 
 
 class TestAnyDate:
@@ -198,7 +205,7 @@ class TestBuckets:
         assert (b["sessions"], b["requests"], b["in"], b["out"], b["aiu"]) == (1, 3, 10, 3, 2.0)
 
     def test_add_flat_accumulates(self):
-        bucket: dict = usage.defaultdict(usage._flatbucket)
+        bucket: dict = defaultdict(usage._flatbucket)
         usage._add_flat(bucket, "gpt", requests=1, in_=5, out=2, aiu=0.25)
         usage._add_flat(bucket, "gpt", requests=1, in_=5, out=2, aiu=0.25)
         assert bucket["gpt"] == {"requests": 2, "in": 10, "out": 4, "aiu": 0.5}
