@@ -1,0 +1,1073 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Software Fundamentals Matter More Than Ever — applied to ghcp-usage-metrics</title>
+<style>
+  :root{
+    --bg:#0d1117; --surface:#161b22; --surface-2:#1c2128; --surface-3:#21262d;
+    --fg:#e6edf3; --fg-muted:#9aa7b4; --fg-subtle:#6e7b8a;
+    --border:#30363d; --border-subtle:#242a31;
+    --accent:#58a6ff; --accent-soft:rgba(88,166,255,.14); --accent-border:rgba(88,166,255,.4);
+    --good:#3fb950; --warn:#d29922; --bad:#f85149;
+    --radius:10px; --radius-sm:6px;
+    --fs-label:.68rem; --fs-sm:.86rem; --fs-base:1rem; --fs-lg:1.35rem; --fs-xl:2.6rem;
+    --mono:"Cascadia Code",Consolas,"SF Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;height:100%}
+  body{
+    background:var(--bg); color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased; overflow:hidden;
+  }
+
+  /* ---------- deck chrome ---------- */
+  #deck{height:100vh;position:relative}
+  .slide{
+    position:absolute; inset:0; display:none;
+    padding:4vh 6vw 6vh; overflow:hidden;
+    animation:fade .22s ease-out;
+  }
+  .slide.active{display:block}
+  /* Content lives in .inner, injected at boot, so it can be scaled to fit any screen. */
+  .inner{display:flex; flex-direction:column; justify-content:center; min-height:100%; transform-origin:top center}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+  .eyebrow{
+    font-size:var(--fs-label); letter-spacing:.13em; text-transform:uppercase;
+    color:var(--accent); font-weight:600; margin:0 0 .8rem;
+  }
+  h1{font-size:clamp(2rem,4.4vw,3.4rem); line-height:1.08; margin:0 0 1.2rem; letter-spacing:-.02em}
+  h2{font-size:clamp(1.5rem,2.9vw,2.3rem); line-height:1.15; margin:0 0 1.4rem; letter-spacing:-.015em}
+  h3{font-size:1.02rem; margin:0 0 .55rem; color:var(--fg)}
+  p{margin:0 0 .9rem; line-height:1.55; color:var(--fg-muted); max-width:60ch}
+  p.lead{font-size:var(--fs-lg); color:var(--fg); max-width:34ch; line-height:1.35}
+  strong{color:var(--fg); font-weight:600}
+  em{color:var(--accent); font-style:normal; font-weight:600}
+  code{font-family:var(--mono); font-size:.86em; background:var(--surface-3);
+       padding:.12em .38em; border-radius:4px; color:#a5d6ff}
+
+  ul{margin:0 0 1rem; padding-left:1.1rem; line-height:1.6; color:var(--fg-muted)}
+  li{margin-bottom:.5rem} li::marker{color:var(--accent)}
+
+  .cols{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:1.4rem; align-items:start}
+  .cols.two{grid-template-columns:1fr 1fr}
+  .cols.tight{gap:1rem}
+
+  .card{
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); padding:1.05rem 1.15rem;
+  }
+  .card.accent{border-left:3px solid var(--accent)}
+  .card.good{border-left:3px solid var(--good)}
+  .card.bad{border-left:3px solid var(--bad)}
+  .card.warn{border-left:3px solid var(--warn)}
+  .card p{margin-bottom:0; font-size:var(--fs-sm)}
+  .card .k{font-size:var(--fs-label); letter-spacing:.1em; text-transform:uppercase;
+           color:var(--fg-subtle); display:block; margin-bottom:.35rem}
+  .card .v{font-size:1.9rem; font-weight:650; color:var(--accent); line-height:1.1;
+           font-variant-numeric:tabular-nums}
+  .card .sub{font-size:var(--fs-label); color:var(--fg-subtle); margin-top:.3rem; display:block}
+
+  table{border-collapse:collapse; width:100%; font-size:var(--fs-sm); margin-bottom:1rem}
+  th{
+    text-align:left; font-size:var(--fs-label); letter-spacing:.09em; text-transform:uppercase;
+    color:var(--fg-subtle); font-weight:600; padding:.5rem .7rem;
+    border-bottom:1px solid var(--border);
+  }
+  td{padding:.55rem .7rem; border-bottom:1px solid var(--border-subtle);
+     color:var(--fg-muted); vertical-align:top; line-height:1.45}
+  td:first-child{color:var(--fg); font-weight:500; white-space:nowrap}
+  tr:last-child td{border-bottom:none}
+
+  blockquote{
+    margin:0 0 1.2rem; padding:.9rem 1.2rem; background:var(--accent-soft);
+    border-left:3px solid var(--accent); border-radius:0 var(--radius-sm) var(--radius-sm) 0;
+    color:var(--fg); font-size:var(--fs-lg); line-height:1.4; max-width:46ch;
+  }
+  blockquote cite{display:block; margin-top:.5rem; font-style:normal;
+                  font-size:var(--fs-label); color:var(--fg-subtle); letter-spacing:.06em}
+
+  .tag{
+    display:inline-block; font-size:var(--fs-label); letter-spacing:.06em;
+    padding:.2rem .5rem; border-radius:999px; border:1px solid var(--border);
+    color:var(--fg-subtle); margin-right:.35rem; background:var(--surface-2);
+  }
+  .tag.on{color:var(--good); border-color:rgba(63,185,80,.4); background:rgba(63,185,80,.1)}
+  .tag.off{color:var(--bad); border-color:rgba(248,81,73,.4); background:rgba(248,81,73,.1)}
+  .tag.mid{color:var(--warn); border-color:rgba(210,153,34,.4); background:rgba(210,153,34,.1)}
+
+  pre{
+    font-family:var(--mono); font-size:.78rem; line-height:1.5; margin:0 0 1rem;
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm);
+    padding:.9rem 1rem; overflow-x:auto; color:var(--fg-muted); white-space:pre;
+  }
+  pre .hi{color:var(--accent)} pre .dim{color:var(--fg-subtle)}
+  pre .red{color:var(--bad)} pre .grn{color:var(--good)}
+
+  /* module diagram */
+  .modmap{display:flex; gap:1.6rem; align-items:stretch; flex-wrap:wrap}
+  .modbox{flex:1; min-width:260px; background:var(--surface); border:1px solid var(--border);
+          border-radius:var(--radius); padding:1rem}
+  .modbox h3{font-size:var(--fs-label); letter-spacing:.1em; text-transform:uppercase;
+             color:var(--fg-subtle); margin-bottom:.8rem}
+  .blobs{display:flex; flex-wrap:wrap; gap:.3rem}
+  .blob{width:22px;height:22px;border-radius:5px;background:var(--surface-3);border:1px solid var(--border)}
+  .deep{border:1px solid var(--accent-border); background:var(--accent-soft);
+        border-radius:var(--radius-sm); padding:.5rem; margin-bottom:.5rem}
+  .deep .iface{height:6px;border-radius:3px;background:var(--accent);margin-bottom:.5rem;width:44%}
+  .deep .blobs .blob{background:var(--surface-2)}
+
+  .footnote{margin-top:2.2rem; padding-top:1rem; font-size:var(--fs-label);
+            color:var(--fg-subtle); border-top:1px solid var(--border-subtle); line-height:1.5}
+
+  /* Plain-English gloss for any specialist wording used on the slide above. */
+  .vocab{
+    margin-top:1.7rem; padding-top:.75rem; border-top:1px dashed var(--border);
+    display:flex; flex-wrap:wrap; gap:.4rem 1.6rem;
+    font-size:var(--fs-label); line-height:1.55; color:var(--fg-subtle);
+  }
+  .vocab::before{
+    content:"Vocabulary"; flex:0 0 100%;
+    letter-spacing:.14em; text-transform:uppercase; font-weight:600;
+    color:var(--accent); opacity:.8; margin-bottom:.15rem;
+  }
+  .vocab span{max-width:46ch}
+  .vocab b{color:var(--fg-muted); font-weight:600}
+  .vocab b::after{content:" — "; font-weight:400; color:var(--fg-subtle)}
+  .vocab + .footnote{margin-top:1rem}
+
+  /* nav */
+  #bar{position:fixed; left:0; bottom:0; height:3px; background:var(--accent); width:0; transition:width .2s; z-index:20}
+  #hud{position:fixed; right:1.4rem; bottom:1rem; font-size:var(--fs-label); color:var(--fg-subtle);
+       font-variant-numeric:tabular-nums; letter-spacing:.08em; z-index:20}
+  #hud b{color:var(--fg-muted); font-weight:600}
+  #hint{position:fixed; left:1.4rem; bottom:1rem; font-size:var(--fs-label); color:var(--fg-subtle); z-index:20}
+  #hint kbd{font-family:var(--mono); background:var(--surface-3); border:1px solid var(--border);
+            border-radius:4px; padding:.05rem .3rem; color:var(--fg-muted)}
+
+  @media print{
+    body{overflow:visible}
+    .slide{display:block !important; position:relative; page-break-after:always; height:100vh}
+    #bar,#hud,#hint{display:none}
+  }
+</style>
+</head>
+<body>
+
+<div id="deck">
+
+<!-- ══════════════════ 1 ══════════════════ -->
+<section class="slide active">
+  <p class="eyebrow">A talk, and what came of it</p>
+  <h1>Software fundamentals matter<br />more than ever</h1>
+  <p class="lead">Matt Pocock's argument — and a working audit of what actually changed in
+  <code>ghcp-usage-metrics</code> because of it.</p>
+  <div class="cols two" style="margin-top:2rem">
+    <div class="card accent">
+      <span class="k">Part one</span>
+      <p>The ideas. Why "code is cheap" is wrong, and the five failure modes it produces.</p>
+    </div>
+    <div class="card good">
+      <span class="k">Part two</span>
+      <p>The application. Domain language, invariants, deep modules, TDD — with the evidence,
+      including where we got it wrong.</p>
+    </div>
+  </div>
+  <div class="footnote">Vinay Bhadauria · ghcp-usage-metrics · a local GitHub Copilot usage extractor and dashboard</div>
+</section>
+
+<!-- ══════════════════ 2 ══════════════════ -->
+<section class="slide">
+  <p class="eyebrow">Part one · The thesis</p>
+  <h2>The comforting message</h2>
+  <blockquote>
+    Software fundamentals matter now more than they actually ever have.
+    <cite>Matt Pocock</cite>
+  </blockquote>
+  <div class="cols two">
+    <div>
+      <p>The fear: AI writes the code, so twenty years of engineering craft is now worth nothing.</p>
+      <p>The argument: the opposite. AI raises the value of a good codebase and raises the
+      <em>cost</em> of a bad one — because a codebase you cannot safely change is a codebase
+      AI cannot safely accelerate.</p>
+    </div>
+    <div class="card accent">
+      <h3>The chain</h3>
+      <ul style="margin-bottom:0">
+        <li>AI in a good codebase performs really well</li>
+        <li>So good codebases matter more than ever</li>
+        <li>So software fundamentals matter more than ever</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ 3 ══════════════════ -->
+<section class="slide">
+  <p class="eyebrow">Part one · The failure that started it</p>
+  <h2>The spec-to-code loop degrades</h2>
+  <div class="cols two">
+    <div>
+      <p>Write a spec, generate code, don't look at the code. Bug? Change the spec, run the
+      "compiler" again.</p>
+      <p>What actually happens: <strong>run one gives code, run two gives worse code, run three
+      gives worse still.</strong> Keep going and you have garbage.</p>
+      <p>This has a name already — <em>software entropy</em>. Every change made while thinking
+      only about that change, and never about the design of the whole system, degrades the system.</p>
+    </div>
+    <div>
+      <div class="card bad" style="margin-bottom:1rem">
+        <span class="k">Complexity (Ousterhout)</span>
+        <p>Anything about the structure of a system that makes it hard to understand and modify.
+        A bad codebase is one you cannot change without causing bugs.</p>
+      </div>
+      <div class="card warn">
+        <span class="k">The slogan being sold</span>
+        <p>"Code is cheap." Ignore the code, let it manage itself.</p>
+        <p style="margin-top:.6rem;color:var(--fg)"><strong>That is vibe coding by another name.</strong></p>
+      </div>
+    </div>
+  </div>
+  <div class="vocab">
+    <span><b>software entropy</b>the tendency of a codebase to drift into disorder as changes pile up, unless someone pushes back</span>
+    <span><b>complexity</b>not difficult maths, but anything about a system's structure that makes it hard to understand or change</span>
+    <span><b>spec-to-code</b>regenerating the whole codebase from a written specification instead of editing the code</span>
+    <span><b>vibe coding</b>generating code from prompts and shipping it without reading what came out</span>
+  </div>
+  <div class="footnote">A Philosophy of Software Design — John Ousterhout · The Pragmatic Programmer — Hunt &amp; Thomas</div>
+</section>
+
+<!-- ══════════════════ 4 ══════════════════ -->
+<section class="slide">
+  <p class="eyebrow">Part one · The correction</p>
+  <h2>Code is not cheap. Bad code is<br />the most expensive it has ever been.</h2>
+  <p class="lead">Because a codebase that is hard to change cannot collect the bounty AI is offering.</p>
+  <div class="cols" style="margin-top:1.5rem">
+    <div class="card"><span class="k">Cheap now</span><span class="v">Writing</span>
+      <span class="sub">Generation is close to free</span></div>
+    <div class="card"><span class="k">Not cheap</span><span class="v">Owning</span>
+      <span class="sub">Understanding, changing, trusting</span></div>
+    <div class="card"><span class="k">The gap</span><span class="v">Yours</span>
+      <span class="sub">Design, review, judgement, risk</span></div>
+  </div>
+  <blockquote style="margin-top:2rem">
+    AI can make writing code cheap. It does not make <em>owning</em> code cheap.
+  </blockquote>
+  <div class="vocab">
+    <span><b>bounty</b>the speed-up AI is offering; you can only collect it if the code is safe to change</span>
+    <span><b>changeability</b>how cheaply and safely a codebase can be altered — the property that decays first</span>
+  </div>
+</section>
+
+<!-- ══════════════════ 5 ══════════════════ -->
+<section class="slide">
+  <p class="eyebrow">Part one · Failure mode 1</p>
+  <h2>"The AI didn't build what I wanted"</h2>
+  <div class="cols two">
+    <div>
+      <p><strong>Diagnosis.</strong> No one knows exactly what they want. Talking to the AI
+      <em>is</em> requirements gathering — and you and it do not share the same picture.</p>
+      <p><strong>The design concept</strong> (Frederick Brooks): when two parties design something
+      together, the idea of the thing floats between them. It is not an artifact. You cannot put
+      it in a markdown file. It is the invisible theory of what is being built.</p>
+      <p><strong>Fix.</strong> Reach a shared design concept <em>before</em> producing any plan asset.</p>
+    </div>
+    <div>
+      <div class="card accent">
+        <span class="k">The skill, in two lines</span>
+        <pre style="margin:.4rem 0 0;background:var(--surface-2)">Interview me relentlessly about every
+aspect of this plan until we reach a
+shared understanding.
+
+Walk down each branch of the design
+tree, resolving dependencies between
+decisions one by one.</pre>
+      </div>
+      <p style="margin-top:1rem">Result: 40, 60, sometimes 100 questions before it is satisfied.
+      The conversation then becomes the PRD or the issue — not the other way round.</p>
+      <p><strong>Contrast with default plan mode:</strong> it is eager to produce an asset and
+      start working. Alignment first is cheaper than rework.</p>
+    </div>
+  </div>
+  <div class="vocab">
+    <span><b>design concept</b>the shared mental picture of what is being built; it lives between people, not in a file</span>
+    <span><b>design tree</b>the branching set of decisions a design implies, where each choice opens or closes later ones</span>
+    <span><b>requirements gathering</b>working out what someone actually needs, as opposed to what they first asked for</span>
+    <span><b>PRD</b>product requirements document — the written statement of what will be built, and why</span>
+  </div>
+</section>
+
+<!-- ══════════════════ 6 ══════════════════ -->
+<section class="slide">
+  <p class="eyebrow">Part one · Failure mode 2</p>
+  <h2>"The AI is way too verbose"</h2>
+  <div class="cols two">
+    <div>
+      <p><strong>Diagnosis.</strong> You are talking across purposes. This is exactly the old
+      developer-and-domain-expert gap: they use terms you don't hold, you translate them into
+      code neither of you can verify.</p>
+      <p><strong>Fix — a ubiquitous language</strong> (DDD): conversations among developers,
+      expressions in the code, and conversations with domain experts all derive from the same
+      domain model.</p>
+      <p>In practice, a markdown file of agreed terms — scanned from the codebase, then kept
+      open while planning.</p>
+    </div>
+    <div class="card good">
+      <span class="k">The observed effect</span>
+      <ul style="margin-bottom:0">
+        <li>Planning quality goes up</li>
+        <li>The model's own <strong>thinking traces get shorter</strong> — it stops narrating
+        around a concept it now has a word for</li>
+        <li>Implementation lands closer to what was planned</li>
+      </ul>
+    </div>
+  </div>
+  <div class="vocab">
+    <span><b>ubiquitous language</b>one agreed word per concept, used identically in conversation, documents and code</span>
+    <span><b>domain</b>the subject the software serves — claims, payments, usage metrics — not the software itself</span>
+    <span><b>domain expert</b>the person who knows that subject deeply but does not write the code</span>
+    <span><b>thinking traces</b>the model's visible internal reasoning before it produces an answer</span>
+  </div>
+  <div class="footnote">Domain-Driven Design — Eric Evans</div>
+</section>
+
+<!-- ══════════════════ 7 ══════════════════ -->
+<section class="slide">
+  <p class="eyebrow">Part one · Failure mode 3</p>
+  <h2>"It built the right thing, and it doesn't work"</h2>
+  <div class="cols two">
+    <div>
+      <p><strong>Obvious layer:</strong> feedback loops. Static types. Browser access for
+      front-end work. Automated tests.</p>
+      <p><strong>The non-obvious part:</strong> even <em>with</em> those loops, the model does not
+      use them the way a veteran does. It writes an enormous amount, then thinks "I should
+      probably type-check that."</p>
+      <blockquote style="font-size:1.05rem;max-width:none">
+        Outrunning your headlights. <strong>The rate of feedback is your speed limit.</strong>
+      </blockquote>
+    </div>
+    <div class="card accent">
+      <span class="k">Why TDD, specifically</span>
+      <p>Not because tests are virtuous. Because <strong>TDD is a mechanical constraint that
+      forces small steps</strong>:</p>
+      <ul style="margin:.8rem 0 0">
+        <li>Write the test first</li>
+        <li>Make it pass with the smallest change</li>
+        <li>Refactor — and consider the design</li>
+      </ul>
+      <p style="margin-top:.8rem">The model cannot outrun a loop it has to close on every step.</p>
+    </div>
+  </div>
+  <div class="vocab">
+    <span><b>feedback loop</b>anything that tells you quickly whether the last change was right — types, tests, a browser</span>
+    <span><b>static types</b>checks that catch mismatched data before the code is ever run</span>
+    <span><b>outrunning your headlights</b>moving faster than you can see, so a mistake surfaces long after it was made</span>
+    <span><b>TDD</b>test-driven development — failing test first, smallest change to pass it, then improve the design</span>
+  </div>
+</section>
+
+<!-- ══════════════════ 8 ══════════════════ -->
+<section class="slide">
+  <p class="eyebrow">Part one · Failure mode 4</p>
+  <h2>Testing is hard — because the decisions are entangled</h2>
+  <div class="cols two tight">
+    <div>
+      <p>Every test forces coupled choices:</p>
+      <ul>
+        <li>How big is the unit under test?</li>
+        <li>What gets mocked?</li>
+        <li>Which behaviours are even worth asserting?</li>
+      </ul>
+      <p>Test a whole application and it is flaky, so you test fewer behaviours. Test this unit
+      and you must mock that one. None of these decisions is independent.</p>
+    </div>
+    <div class="card good">
+      <span class="k">The pivot back to code</span>
+      <p style="font-size:var(--fs-lg);color:var(--fg);line-height:1.35">
+      Good codebases are <em>testable</em> codebases.</p>
+      <p style="margin-top:.8rem">Which closes the loop: better structure → better feedback loops
+      → better feedback to the model → better code out.</p>
+      <p><strong>Testability is an architectural property, not a testing-discipline property.</strong></p>
+    </div>
+  </div>
+  <div class="vocab">
+    <span><b>unit</b>the slice of code one test exercises; choosing its size is the first hard decision</span>
+    <span><b>mock</b>a stand-in for a real dependency so a test can run without it</span>
+    <span><b>flaky</b>a test that passes and fails on identical code, so it stops meaning anything</span>
+    <span><b>testability</b>how easily a system can be verified from outside — a property of its design, not its tests</span>
+  </div>
+</section>
+
+<!-- ══════════════════ 9 ══════════════════ -->
+<section class="slide">
+  <p class="eyebrow">Part one · The central structural idea</p>
+  <h2>Deep modules, not shallow ones</h2>
+  <div class="modmap" style="margin-bottom:1.2rem">
+    <div class="modbox">
+      <h3>Shallow — what AI produces by default</h3>
+      <div class="blobs">
+        <span class="blob"></span><span class="blob"></span><span class="blob"></span><span class="blob"></span>
+        <span class="blob"></span><span class="blob"></span><span class="blob"></span><span class="blob"></span>
+        <span class="blob"></span><span class="blob"></span><span class="blob"></span><span class="blob"></span>
+        <span class="blob"></span><span class="blob"></span><span class="blob"></span><span class="blob"></span>
+        <span class="blob"></span><span class="blob"></span><span class="blob"></span><span class="blob"></span>
+      </div>
+      <p style="font-size:var(--fs-sm);margin:.9rem 0 0">Little functionality, complex interface.
+      Dozens of tiny pieces the model has to walk to understand anything — and it often does not
+      reach the right one in time.</p>
+    </div>
+    <div class="modbox">
+      <h3>Deep — the same code, bounded</h3>
+      <div class="deep"><div class="iface"></div><div class="blobs">
+        <span class="blob"></span><span class="blob"></span><span class="blob"></span>
+        <span class="blob"></span><span class="blob"></span><span class="blob"></span></div></div>
+      <div class="deep"><div class="iface"></div><div class="blobs">
+        <span class="blob"></span><span class="blob"></span><span class="blob"></span>
+        <span class="blob"></span><span class="blob"></span></div></div>
+      <div class="deep"><div class="iface"></div><div class="blobs">
+        <span class="blob"></span><span class="blob"></span><span class="blob"></span></div></div>
+      <p style="font-size:var(--fs-sm);margin:.9rem 0 0">Lots of functionality behind a simple
+      interface. You <em>can</em> look inside; you don't <em>need</em> to.</p>
+    </div>
+  </div>
+  <div class="cols tight">
+    <div class="card accent"><span class="k">Who owns what</span>
+      <p>You design the interfaces carefully. The implementation inside can be delegated.</p></div>
+    <div class="card accent"><span class="k">Why it is testable</span>
+      <p>The boundary is simple: test at the interface, verify through the interface, done.
+      A codebase that rewards TDD.</p></div>
+    <div class="card accent"><span class="k">Why the model does better</span>
+      <p>Fewer, clearer things to navigate before it can change anything correctly.</p></div>
+  </div>
+  <div class="vocab">
+    <span><b>module</b>a self-contained piece of the system with a boundary drawn around it</span>
+    <span><b>interface</b>the small surface a module exposes — everything a caller has to know about it</span>
+    <span><b>deep module</b>a lot of functionality hidden behind a small, simple interface</span>
+    <span><b>shallow module</b>little functionality behind a comparatively large or fiddly interface</span>
+  </div>
+</section>
+
+<!-- ══════════════════ 10 ══════════════════ -->
+<section class="slide">
+  <p class="eyebrow">Part one · Failure mode 5</p>
+  <h2>"I can ship more than ever, and my brain can't keep up"</h2>
+  <div class="cols two">
+    <div>
+      <p>More output means more review, more context, more system held in your head at once.
+      A shallow codebase forces <em>you</em> to hold all of it too — not just the model.</p>
+      <p><strong>Deep modules give you gray boxes.</strong> Design the interface. Understand the
+      purpose. Verify from the outside. Don't read every line inside.</p>
+      <p><strong>The boundary of that permission is risk</strong> — finance, security, safety,
+      anything correctness-critical still gets read. Most modules in most apps do not.</p>
+    </div>
+    <div>
+      <div class="card accent" style="margin-bottom:1rem">
+        <span class="k">Tip five</span>
+        <p style="font-size:var(--fs-lg);color:var(--fg);line-height:1.35">
+        Design the interface.<br />Delegate the implementation.</p>
+      </div>
+      <div class="card">
+        <span class="k">The consequence for planning</span>
+        <p>If modules are the unit of delegation, then every plan has to name the modules and
+        interfaces it touches — not just the feature it adds. Module structure becomes part of
+        the ubiquitous language.</p>
+      </div>
+    </div>
+  </div>
+  <div class="vocab">
+    <span><b>gray box</b>something judged by its boundary and behaviour without reading the inside — between a black box (opaque) and a white box (fully inspected)</span>
+    <span><b>correctness-critical</b>code where being wrong is expensive: money, safety, security, compliance</span>
+  </div>
+</section>
+
+<!-- ══════════════════ 11 ══════════════════ -->
+<section class="slide">
+  <p class="eyebrow">Part one · The close</p>
+  <h2>Invest in the design of the system every day</h2>
+  <div class="cols two">
+    <div>
+      <blockquote>Spec-to-code does not invest in the design of the system.<br />
+      It <em>divests</em> from it.</blockquote>
+      <p>Every regeneration that ignores structure spends the system's remaining changeability.</p>
+    </div>
+    <div class="card good">
+      <span class="k">The division of labour</span>
+      <p style="font-size:var(--fs-lg);color:var(--fg);line-height:1.4;margin-bottom:.8rem">
+      AI is an excellent <em>tactical</em> programmer — the sergeant on the ground making the change.</p>
+      <p>Someone has to be operating at the strategic level: architecture, requirements, risk,
+      what "correct" means. That is you, and it needs exactly the fundamentals we have used for
+      twenty years.</p>
+    </div>
+  </div>
+  <div class="vocab">
+    <span><b>divest</b>to run an asset down rather than build it up; here, spending the system's remaining changeability</span>
+    <span><b>tactical</b>solving the change directly in front of you</span>
+    <span><b>strategic</b>shaping the system so that future changes stay cheap</span>
+  </div>
+  <div class="footnote">Kent Beck · "Invest in the design of the system every day."</div>
+</section>
+
+<!-- ══════════════════ 12 ══════════════════ -->
+<section class="slide">
+  <p class="eyebrow">Part one · Summary</p>
+  <h2>Five failure modes, five fixes</h2>
+  <table>
+    <thead><tr><th style="width:24%">Failure mode</th><th style="width:30%">Root cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>It built the wrong thing</td><td>No shared design concept</td>
+          <td>Be interviewed relentlessly until understanding is shared — <em>before</em> any plan artifact exists</td></tr>
+      <tr><td>It is too verbose</td><td>No shared vocabulary</td>
+          <td>A ubiquitous language file; the same terms in requirements, code, and conversation</td></tr>
+      <tr><td>It doesn't work</td><td>Feedback arrives too late</td>
+          <td>Types, tests, browser access — and TDD to force small steps. Feedback rate is the speed limit</td></tr>
+      <tr><td>Testing is painful</td><td>Shallow modules, tangled boundaries</td>
+          <td>Deep modules: lots of functionality, simple interface. Testability is architecture</td></tr>
+      <tr><td>Your brain can't keep up</td><td>You are holding the whole system</td>
+          <td>Treat modules as gray boxes. Design the interface, delegate the implementation</td></tr>
+    </tbody>
+  </table>
+  <p style="margin-top:.5rem"><strong>And underneath all five:</strong> invest in the design of
+  the system every day. Code is not cheap.</p>
+</section>
+
+<!-- ══════════════════ 13 ══════════════════ -->
+<section class="slide">
+  <p class="eyebrow">Part two</p>
+  <h1>What we actually applied</h1>
+  <p class="lead">Not "we agree with the talk". A traceable audit of what changed in
+  <code>ghcp-usage-metrics</code>, including the part we got wrong.</p>
+  <div class="cols" style="margin-top:2rem">
+    <div class="card accent"><span class="k">The project</span>
+      <p>Reads local GitHub Copilot logs — VS Code, Copilot CLI, Claude Code — and reports
+      credits, tokens, requests per project, model, agent and skill. Pure stdlib. Ships as a
+      script, a VS Code extension, and a chat skill.</p></div>
+    <div class="card accent"><span class="k">The one rule</span>
+      <p style="color:var(--fg);font-weight:600">Only show what GitHub actually recorded.</p>
+      <p>No estimation, no interpolation, no back-filling. A gap is reported as a gap. This
+      constraint shapes almost every design decision below.</p></div>
+    <div class="card accent"><span class="k">Why it is a fair test</span>
+      <p>A measurement tool has nowhere to hide. If the architecture lets a wrong number
+      through, the product is the wrong number.</p></div>
+  </div>
+  <div class="vocab">
+    <span><b>extractor</b>the part that reads raw log files and turns them into structured numbers</span>
+    <span><b>harness</b>the tool a request came from — VS Code, the CLI, Claude Code</span>
+    <span><b>credits / AIU</b>GitHub's own unit of AI usage, taken straight from the log, never calculated by us</span>
+    <span><b>stdlib only</b>uses nothing but the language's built-in libraries — nothing extra to install or trust</span>
+  </div>
+</section>
+
+<!-- ══════════════════ 14 ══════════════════ -->
+<section class="slide">
+  <p class="eyebrow">Part two · The map</p>
+  <h2>Idea → artifact → evidence</h2>
+  <table>
+    <thead><tr><th style="width:22%">From the talk</th><th style="width:26%">What we built</th><th>Evidence you can open</th></tr></thead>
+    <tbody>
+      <tr><td>Ubiquitous language</td><td><code>DOMAIN.md</code> — one agreed word per concept</td>
+          <td>Term table + aggregate diagram; disagreements <em>recorded</em>, not hidden</td></tr>
+      <tr><td>Rules must be checkable</td><td>The invariant register, INV-1 … INV-27</td>
+          <td>Every rule names its enforcing test, or is explicitly marked <span class="tag off">NOT ENFORCED</span>. No third category</td></tr>
+      <tr><td>Deep modules</td><td><code>ghcp/</code> package + <code>web/js/</code> modules</td>
+          <td><code>usage.py</code> 1001 → 216 lines; <code>build_dashboard.py</code> 2249 → 50</td></tr>
+      <tr><td>Feedback loops</td><td>Six test layers, two languages</td>
+          <td><strong>110 Python + 132 JavaScript = 242 tests</strong>, all green</td></tr>
+      <tr><td>Design the interface</td><td>Explicit-path scanners, zero-arg wrappers</td>
+          <td>Implementations independently testable; the injection seam unchanged</td></tr>
+      <tr><td>Entropy control</td><td>Golden masters, contract tests, sync tests</td>
+          <td>A stale copy or a silent rename fails a test, not a user's number</td></tr>
+      <tr><td>TDD</td><td>Adopted mid-project, after a real cost</td>
+          <td>The next three slides — this is the honest part</td></tr>
+    </tbody>
+  </table>
+  <div class="vocab">
+    <span><b>invariant</b>a rule that must stay true no matter what the data does</span>
+    <span><b>golden master</b>a saved copy of known-correct output; the test fails if new output differs at all</span>
+    <span><b>contract test</b>a test that pins the agreed <em>shape</em> of the data — the names and keys — rather than its values</span>
+    <span><b>seam</b>a deliberate place where a test can swap something real for something controlled</span>
+  </div>
+</section>
+
+<!-- ══════════════════ 15 ══════════════════ -->
+<section class="slide">
+  <p class="eyebrow">Part two · Ubiquitous language</p>
+  <h2>DOMAIN.md — and why it exists</h2>
+  <div class="cols two">
+    <div>
+      <p>It was not written because DDD recommends it. It was written because of a specific failure:</p>
+      <div class="card bad">
+        <span class="k">The failure</span>
+        <p>The claim <em>"GitHub's per-day telemetry records no model"</em> was written into three
+        files, quoted in the docs, and pinned by a <strong>passing test</strong>.</p>
+        <p style="margin-top:.6rem">It was false. The logs had carried the date and the model on
+        the same event all along — the code was discarding the pairing.</p>
+      </div>
+      <p style="margin-top:1rem"><strong>Nothing caught it, because a rule that lives in prose has
+      nothing to fail against.</strong></p>
+    </div>
+    <div>
+      <h3 style="margin-bottom:.7rem">A slice of the agreed vocabulary</h3>
+      <table>
+        <thead><tr><th>Term</th><th>Means</th></tr></thead>
+        <tbody>
+          <tr><td>Harness</td><td>The tool that produced the record</td></tr>
+          <tr><td>Project</td><td>The aggregate root; what a reader cares about</td></tr>
+          <tr><td>Request</td><td>One recorded call to a model — the atomic fact</td></tr>
+          <tr><td>Measure</td><td>A number that sums. Never estimated</td></tr>
+          <tr><td>Dimension</td><td>A projection of the same facts, not separate data</td></tr>
+          <tr><td>Credit / AIU</td><td>GitHub's own field ÷ 1e9. Never computed by us</td></tr>
+          <tr><td>Placeholder</td><td>A stand-in for something the source never recorded</td></tr>
+        </tbody>
+      </table>
+      <p style="font-size:var(--fs-sm)">Where code and UI disagree — code says <code>client</code>,
+      the UI says "Harness" — the equivalence is <em>recorded as a decision</em> rather than
+      quietly tolerated.</p>
+    </div>
+  </div>
+  <div class="vocab">
+    <span><b>aggregate root</b>the single object everything else hangs off — here, the project</span>
+    <span><b>measure</b>a number that can legitimately be added up</span>
+    <span><b>dimension</b>a way of slicing the same facts — by day, by model, by agent</span>
+    <span><b>placeholder</b>a stand-in for something the source never recorded</span>
+  </div>
+</section>
+
+<!-- ══════════════════ 16 ══════════════════ -->
+<section class="slide">
+  <p class="eyebrow">Part two · Making rules fail-able</p>
+  <h2>The invariant register</h2>
+  <div class="cols" style="margin-bottom:1.2rem">
+    <div class="card"><span class="k">Invariants declared</span><span class="v">27</span>
+      <span class="sub">INV-1 … INV-27</span></div>
+    <div class="card"><span class="k">Enforced by a named test</span><span class="v">26</span>
+      <span class="sub">The test is printed next to the rule</span></div>
+    <div class="card"><span class="k">Explicitly unenforced</span><span class="v">1</span>
+      <span class="sub">Marked, not hidden</span></div>
+    <div class="card"><span class="k">Third category</span><span class="v">0</span>
+      <span class="sub">There isn't one, by design</span></div>
+  </div>
+  <div class="cols two">
+    <div>
+      <h3>What a rule looks like now</h3>
+      <table>
+        <thead><tr><th>#</th><th>Invariant</th><th>Enforced by</th></tr></thead>
+        <tbody>
+          <tr><td>INV-2</td><td><code>by_dm</code> decomposes on both axes: per date it equals <code>by_day</code>, per model it equals <code>by_model</code></td><td><code>test_snapshot_live</code></td></tr>
+          <tr><td>INV-11</td><td>A model-less request carries zero tokens and zero credits</td><td><code>test_invariants</code></td></tr>
+          <tr><td>INV-18</td><td>Demotion is judged on lifetime usage</td><td><span class="tag off">NOT ENFORCED</span></td></tr>
+          <tr><td>INV-27</td><td>A request is never attributed to a model the source did not name</td><td><code>test_invariants</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card accent">
+      <span class="k">The principle</span>
+      <p style="font-size:var(--fs-lg);color:var(--fg);line-height:1.35">A rule that lives only in
+      a comment cannot be violated. It can only be <em>contradicted</em> — silently.</p>
+      <p style="margin-top:.9rem">So the register is the ubiquitous language with teeth: it is
+      the shared vocabulary <em>plus</em> the mechanism that makes disagreement fail loudly.</p>
+    </div>
+  </div>
+  <div class="vocab">
+    <span><b>register</b>a numbered list kept in one place, so a rule is never rediscovered twice</span>
+    <span><b>decompose</b>break a total apart along an axis and check the parts still add back up to it</span>
+    <span><b>enforced by</b>the named test that fails the moment the rule stops being true</span>
+  </div>
+</section>
+
+<!-- ══════════════════ 17 ══════════════════ -->
+<section class="slide">
+  <p class="eyebrow">Part two · The honest slide</p>
+  <h2>We were not doing TDD. Here is what it cost.</h2>
+  <div class="cols two">
+    <div>
+      <p>For most of the project the loop was: build the feature, then wrap tests around what was
+      built. Those tests pass. They also <strong>encode whatever the code already does</strong>,
+      including its mistakes.</p>
+      <div class="card bad">
+        <span class="k">The concrete bill</span>
+        <p>A false claim — that a model filter could never re-scope headline credits — was
+        documented in <strong>three</strong> places <em>and pinned by a passing test</em>.</p>
+        <p style="margin-top:.6rem">A test written <strong>first</strong> would have been
+        unpassable. It would have forced the discovery days earlier.</p>
+      </div>
+    </div>
+    <div>
+      <div class="card good">
+        <span class="k">What the test-last loop produces</span>
+        <pre style="margin:.5rem 0 0;background:var(--surface-2)"><span class="dim">write code</span>
+<span class="dim">observe behaviour</span>
+<span class="red">assert the behaviour you observed</span>   <span class="dim">← green, and meaningless</span></pre>
+      </div>
+      <div class="card accent" style="margin-top:1rem">
+        <span class="k">What the test-first loop produces</span>
+        <pre style="margin:.5rem 0 0;background:var(--surface-2)"><span class="hi">assert the behaviour you want</span>
+<span class="red">watch it fail — for the predicted reason</span>
+<span class="grn">smallest change that makes it pass</span>
+<span class="dim">run everything; a failure elsewhere means
+the change is wrong, not the test</span></pre>
+      </div>
+      <p style="margin-top:1rem;font-size:var(--fs-sm)">That last line is now a written rule in the
+      repo's own instructions file.</p>
+    </div>
+  </div>
+  <div class="vocab">
+    <span><b>test-last</b>writing the test after the code, so it records what the code <em>does</em> rather than what it <em>should</em> do</span>
+    <span><b>pinned by a test</b>a wrong behaviour protected by a passing test, so correcting it looks like breaking something</span>
+    <span><b>green / red</b>a suite where every test passes / one where something fails</span>
+  </div>
+</section>
+
+<!-- ══════════════════ 18 ══════════════════ -->
+<section class="slide">
+  <p class="eyebrow">Part two · The payoff</p>
+  <h2>The discovery the false test was hiding</h2>
+  <div class="cols two">
+    <div>
+      <p>Once the claim was tested instead of asserted, the cause was obvious: the extractor read
+      the timestamp <em>and</em> the model from the <strong>same log event</strong>, then wrote them
+      into two separate aggregates — <strong>discarding the pairing</strong>.</p>
+      <pre><span class="dim"># before — the pairing is thrown away</span>
+by_day[date]   += usage
+by_model[model] += usage
+
+<span class="hi"># after — a new dimension keeps it</span>
+by_dm[date + SEP + model] += usage</pre>
+      <p><strong>The date × model pairing was in the raw logs the whole time.</strong> The
+      limitation was ours, not GitHub's.</p>
+    </div>
+    <div>
+      <div class="card good" style="margin-bottom:1rem">
+        <span class="k">The proof, as an invariant</span>
+        <p><code>by_dm</code> must decompose on both axes — summed per date it equals
+        <code>by_day</code>; summed per model it equals <code>by_model</code>. Verified against
+        real data, not fixtures.</p>
+      </div>
+      <div class="card accent">
+        <span class="k">What the user got</span>
+        <p>A model filter that re-scopes <em>everything</em> — credits, requests, projects, days —
+        instead of a checkbox that dimmed one row and changed nothing.</p>
+      </div>
+      <p style="margin-top:1rem;font-size:var(--fs-sm)"><strong>Cost of the wrong dimension:</strong>
+      the claim was written three times, believed for weeks, and defended by CI.</p>
+    </div>
+  </div>
+  <div class="vocab">
+    <span><b>aggregate</b>a running total kept while reading the logs</span>
+    <span><b>the pairing</b>the fact that two values arrived on the same log event and therefore belong together</span>
+    <span><b>CI</b>continuous integration — the automated test run that guards every change</span>
+  </div>
+</section>
+
+<!-- ══════════════════ 19 ══════════════════ -->
+<section class="slide">
+  <p class="eyebrow">Part two · Deep modules</p>
+  <h2>Two files were the system. Now they are the seam.</h2>
+  <div class="cols two" style="margin-bottom:1rem">
+    <div class="card bad">
+      <span class="k">Before</span>
+      <pre style="margin:.4rem 0 0;background:var(--surface-2)">usage.py             1001 lines
+dashboard_template.py 2249 lines</pre>
+      <p style="margin-top:.7rem">Everything: paths, parsing, aggregation, diagnostics, HTML, CSS
+      and JS. One <code>render()</code> of ~155 lines did filtering, aggregation and painting.</p>
+    </div>
+    <div class="card good">
+      <span class="k">After</span>
+      <pre style="margin:.4rem 0 0;background:var(--surface-2)">usage.py              216   <span class="dim">entry + paths</span>
+build_dashboard.py     50   <span class="dim">assembler</span>
+ghcp/        12 modules     <span class="dim">38–337 lines</span>
+web/js/      12 modules     <span class="dim">46–317 lines</span></pre>
+      <p style="margin-top:.7rem"><code>render()</code> split into <code>computeScope</code> →
+      <code>aggregate</code> → painters.</p>
+    </div>
+  </div>
+  <div class="cols tight">
+    <div class="card accent"><span class="k">Deep, not merely split</span>
+      <p><code>ghcp/scan/vscode.py</code> is the biggest module at 337 lines — deliberately. It
+      hides debug logs, chat sessions, subagent child logs and skill attribution behind one call.</p></div>
+    <div class="card accent"><span class="k">The safety method</span>
+      <p>Golden masters <em>first</em>: a hash of the assembled HTML and a full snapshot of the
+      output. Proven to catch a one-character change. Then slice at exact boundaries and assert
+      the parts rejoin byte-identically <strong>before</strong> deleting the original.</p></div>
+    <div class="card accent"><span class="k">Interface designed, implementation delegated</span>
+      <p>Scanners take explicit paths, so they are independently testable. <code>usage.py</code>
+      keeps zero-argument wrappers that read module globals at call time, so the test injection
+      seam never moved.</p></div>
+  </div>
+  <div class="vocab">
+    <span><b>assembler</b>code that stitches separate source files together into one output file</span>
+    <span><b>byte-identical</b>literally the same file, not merely equivalent-looking</span>
+    <span><b>injection seam</b>the one place a test can point the code at a fake filesystem instead of the real one</span>
+    <span><b>zero-argument wrapper</b>a thin function that reads its settings at call time, so a test can change them late</span>
+  </div>
+</section>
+
+<!-- ══════════════════ 20 ══════════════════ -->
+<section class="slide">
+  <p class="eyebrow">Part two · Feedback loops</p>
+  <h2>Six layers, because each catches a different lie</h2>
+  <table>
+    <thead><tr><th style="width:20%">Layer</th><th style="width:34%">Catches</th><th>Why the others don't</th></tr></thead>
+    <tbody>
+      <tr><td>Unit — pure helpers</td><td>Wrong maths, wrong parsing, wrong dates</td><td>Fast, no I/O, no DOM. 42 tests on naming and normalisation alone</td></tr>
+      <tr><td>Synthetic end-to-end</td><td>Wrong aggregation across a whole fake log tree</td><td>Hand-computed expected values, so a plausible-looking total still fails</td></tr>
+      <tr><td>Invariant</td><td>Dimensions that stop agreeing</td><td>Doesn't assert a value — asserts a <em>relationship</em>, so it survives new data</td></tr>
+      <tr><td>Contract</td><td>A rename, or a fixture that lies about the real shape</td><td>Golden masters only froze values — a rename would just be "regenerate the golden"</td></tr>
+      <tr><td>Golden master</td><td>Unintended UI drift</td><td>Byte-identical or it fails; intentional changes are regenerated <em>deliberately</em></td></tr>
+      <tr><td>Live snapshot</td><td>Rules that hold on fixtures but not on reality</td><td>Runs against real extracted output; skips cleanly when absent</td></tr>
+    </tbody>
+  </table>
+  <div class="cols" style="margin-top:.6rem">
+    <div class="card"><span class="k">Python</span><span class="v">110</span></div>
+    <div class="card"><span class="k">JavaScript</span><span class="v">132</span></div>
+    <div class="card"><span class="k">Total, all green</span><span class="v">242</span></div>
+    <div class="card"><span class="k">Runtime dependencies shipped</span><span class="v">0</span>
+      <span class="sub">jsdom is test-only</span></div>
+  </div>
+  <div class="vocab">
+    <span><b>fixture</b>the prepared data a test runs against</span>
+    <span><b>synthetic</b>invented data built to match the real thing exactly in shape</span>
+    <span><b>end-to-end</b>a test that exercises the whole path rather than one piece of it</span>
+    <span><b>drift</b>output quietly changing over time without anyone deciding it should</span>
+  </div>
+</section>
+
+<!-- ══════════════════ 21 ══════════════════ -->
+<section class="slide">
+  <p class="eyebrow">Part two · Entropy control</p>
+  <h2>Making decay fail a test instead of a user</h2>
+  <div class="cols two">
+    <div>
+      <p>The tool ships from one source but runs from four places — repo, committed skill bundle,
+      the global agent skill, and the packaged extension. <strong>None of them notice when they
+      fall behind.</strong> A stale copy just quietly reports different numbers.</p>
+      <div class="card good">
+        <span class="k">The fix</span>
+        <p><code>test_bundle_sync.py</code> fails when any copy drifts. A forgotten sync shows up
+        as a red test, not as wrong numbers weeks later.</p>
+      </div>
+      <p style="margin-top:1rem">Paired with an instructions file scoped to exactly the files that
+      trigger it — so the rule reaches whoever edits them, human or agent.</p>
+    </div>
+    <div>
+      <h3>Two guards that earned their place immediately</h3>
+      <div class="card accent" style="margin-bottom:1rem">
+        <span class="k">One home for the placeholder</span>
+        <p>A magic string was hardcoded at five sites. A guard test asserts the literal appears in
+        <strong>exactly one</strong> module — and on its first run it found a
+        <strong>sixth</strong> occurrence that had been missed.</p>
+      </div>
+      <div class="card accent">
+        <span class="k">Delete the fallback, let it raise</span>
+        <p>An unknown-model placeholder was probed against the live snapshot: <strong>zero hits
+        across 51 projects and 14,119 requests.</strong> It had never once fired. So it was deleted
+        rather than dignified with a constant — a missing model now raises and lands in
+        Diagnostics naming the file.</p>
+      </div>
+    </div>
+  </div>
+  <div class="vocab">
+    <span><b>magic string</b>a bare literal value repeated across the code, with no name and no single home</span>
+    <span><b>fallback</b>a default used when the expected value is missing — convenient, and very good at hiding real problems</span>
+    <span><b>raise</b>stop and report the error instead of quietly substituting something plausible</span>
+    <span><b>guard test</b>a test whose only job is to stop a known bad habit reappearing</span>
+  </div>
+</section>
+
+<!-- ══════════════════ 22 ══════════════════ -->
+<section class="slide">
+  <p class="eyebrow">Part two · What generalises</p>
+  <h2>Lessons the talk did not give us — the project did</h2>
+  <div class="cols tight">
+    <div class="card accent">
+      <span class="k">01</span>
+      <h3>A rule in prose has nothing to fail against</h3>
+      <p>The lesson from the contradictory comment is <em>not</em> "update your comments". It is
+      that prose is the wrong home for a rule. Move it somewhere it can go red.</p>
+    </div>
+    <div class="card accent">
+      <span class="k">02</span>
+      <h3>Red for the wrong reason is not red</h3>
+      <p>A fixture writing to a key nothing reads fails with the right message and the wrong
+      cause. Read the failure before writing the fix.</p>
+    </div>
+    <div class="card accent">
+      <span class="k">03</span>
+      <h3>Fixtures must be faithful, not convenient</h3>
+      <p>A filter looked complete against invented data where the awkward rows sat alone. In real
+      logs they sit <em>beside</em> normal usage — and a default filter was deleting the invented
+      project before the assertion ran.</p>
+    </div>
+    <div class="card accent">
+      <span class="k">04</span>
+      <h3>Never derive scope from DOM the same render is about to rewrite</h3>
+      <p>Reading checkbox state back from the page made the filter lag by one render. State lives
+      in the state object; the DOM is an output.</p>
+    </div>
+    <div class="card accent">
+      <span class="k">05</span>
+      <h3>Pass <code>now</code> as an argument</h3>
+      <p>The forecast takes the current time as a parameter instead of reading the clock. Month-end
+      and leap-year arithmetic became deterministic and testable. Do this for anything time-dependent.</p>
+    </div>
+    <div class="card accent">
+      <span class="k">06</span>
+      <h3>A control whose only effect is on another tab reads as broken</h3>
+      <p>The model filter worked perfectly and was reported as a bug, because every surface it
+      changed was somewhere else. Give feedback at the point of interaction.</p>
+    </div>
+  </div>
+  <div class="vocab">
+    <span><b>DOM</b>the live structure of the page as the browser holds it</span>
+    <span><b>render</b>one pass of redrawing the page from the current state</span>
+    <span><b>scope</b>the subset of data currently selected for display</span>
+    <span><b>deterministic</b>the same inputs always give the same result — which is what makes it testable</span>
+  </div>
+</section>
+
+<!-- ══════════════════ 23 ══════════════════ -->
+<section class="slide">
+  <p class="eyebrow">Part two · Honest accounting</p>
+  <h2>What it cost, what it bought</h2>
+  <div class="cols two">
+    <div>
+      <h3>The cost</h3>
+      <ul>
+        <li>Two large files became 26 modules across two languages — more files to navigate</li>
+        <li>242 tests to keep green on every change</li>
+        <li>Four copies to keep synchronised, plus the machinery that checks them</li>
+        <li>A domain document and an invariant register that must be updated with the code</li>
+        <li>Output grew from 130 KB to 186 KB to carry the new dimension</li>
+      </ul>
+      <p><strong>None of this was free, and none of it was refactoring for its own sake.</strong>
+      Each piece was added after something specific went wrong.</p>
+    </div>
+    <div>
+      <h3>What it bought</h3>
+      <ul>
+        <li>A whole capability that had been declared impossible three times — found by testing
+        the claim instead of repeating it</li>
+        <li>Refactors that are provably behaviour-preserving, byte for byte</li>
+        <li>A rename or a stale bundle fails CI instead of silently changing someone's numbers</li>
+        <li>Sizeable changes delegated to the model inside modules, verified at the boundary</li>
+        <li>Documentation that <strong>cannot</strong> drift from the code without failing a test</li>
+      </ul>
+      <div class="card good">
+        <span class="k">The measurable state</span>
+        <p>51 projects · 451 sessions · 14,353 requests · 202,804.84 credits · 90 active days —
+        every figure traceable to a recorded log event.</p>
+      </div>
+    </div>
+  </div>
+  <div class="vocab">
+    <span><b>behaviour-preserving</b>restructured code that provably does exactly what it did before</span>
+    <span><b>green</b>every test passing — the state a change has to leave the repo in</span>
+  </div>
+</section>
+
+<!-- ══════════════════ 24 ══════════════════ -->
+<section class="slide">
+  <p class="eyebrow">Close</p>
+  <h2>The takeaway</h2>
+  <blockquote style="max-width:none">
+    Code is not cheap. AI is a superb tactical programmer.<br />
+    <em>The strategic layer is still yours</em> — and it runs on fundamentals we already had.
+  </blockquote>
+  <div class="cols" style="margin-top:1.4rem">
+    <div class="card accent"><span class="k">Say what the words mean</span>
+      <p>Ubiquitous language, agreed once, used in requirements, code and conversation alike.</p></div>
+    <div class="card accent"><span class="k">Make every rule fail-able</span>
+      <p>If it matters, it has a test. If it has no test, say so out loud.</p></div>
+    <div class="card accent"><span class="k">Keep the loop short</span>
+      <p>Test first. Smallest change. The feedback rate is the speed limit.</p></div>
+    <div class="card accent"><span class="k">Own the interfaces</span>
+      <p>Design them yourself. Delegate what sits behind them. Verify from outside.</p></div>
+  </div>
+  <div class="footnote">
+    Talk: "Software Fundamentals Matter More Than Ever" — Matt Pocock ·
+    Sources referenced: A Philosophy of Software Design (Ousterhout), The Pragmatic Programmer,
+    The Design of Design (Brooks), Domain-Driven Design (Evans), Kent Beck ·
+    Applied in: github.com/vinay199129/ghcp-usage-metrics
+  </div>
+</section>
+
+</div>
+
+<div id="bar"></div>
+<div id="hud"><b id="cur">1</b> / <span id="tot">24</span></div>
+<div id="hint"><kbd>←</kbd> <kbd>→</kbd> navigate · <kbd>F</kbd> fullscreen · <kbd>P</kbd> print to PDF</div>
+
+<script>
+(function () {
+  var slides = Array.prototype.slice.call(document.querySelectorAll(".slide"));
+  var bar = document.getElementById("bar");
+  var cur = document.getElementById("cur");
+  document.getElementById("tot").textContent = slides.length;
+  var i = 0;
+
+  slides.forEach(function (s) {
+    var inner = document.createElement("div");
+    inner.className = "inner";
+    while (s.firstChild) { inner.appendChild(s.firstChild); }
+    s.appendChild(inner);
+  });
+
+  // Shrink a slide until it fits rather than letting it scroll away off-screen.
+  function fit(s) {
+    var inner = s.querySelector(".inner");
+    var wasHidden = !s.classList.contains("active");
+    if (wasHidden) { s.style.visibility = "hidden"; s.classList.add("active"); }
+    inner.style.transform = "none";
+    inner.style.minHeight = "0";
+    var cs = getComputedStyle(s);
+    var avail = s.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    var need = inner.scrollHeight;
+    inner.style.minHeight = "";
+    var k = need > avail ? Math.max(0.5, avail / need) : 1;
+    inner.style.transform = k < 1 ? "scale(" + k + ")" : "none";
+    if (wasHidden) { s.classList.remove("active"); s.style.visibility = ""; }
+  }
+
+  function fitAll() { slides.forEach(fit); }
+
+  function show(n) {
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach(function (s, k) { s.classList.toggle("active", k === i); });
+    fit(slides[i]);
+    bar.style.width = ((i + 1) / slides.length * 100) + "%";
+    cur.textContent = i + 1;
+    try { location.hash = "s" + (i + 1); } catch (e) { /* file:// without history */ }
+  }
+
+  var resizeTimer;
+  window.addEventListener("resize", function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () { fit(slides[i]); }, 120);
+  });
+  window.addEventListener("beforeprint", fitAll);
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowRight" || e.key === "PageDown" || e.key === " ") { e.preventDefault(); show(i + 1); }
+    else if (e.key === "ArrowLeft" || e.key === "PageUp") { e.preventDefault(); show(i - 1); }
+    else if (e.key === "Home") { show(0); }
+    else if (e.key === "End") { show(slides.length - 1); }
+    else if (e.key === "f" || e.key === "F") {
+      if (document.fullscreenElement) { document.exitFullscreen(); }
+      else { document.documentElement.requestFullscreen(); }
+    }
+    else if (e.key === "p" || e.key === "P") { window.print(); }
+  });
+
+  document.addEventListener("click", function (e) {
+    if (e.target.closest("a, pre, table")) { return; }
+    show(e.clientX < window.innerWidth * 0.25 ? i - 1 : i + 1);
+  });
+
+  var start = parseInt((location.hash || "").replace("#s", ""), 10);
+  show(isNaN(start) ? 0 : start - 1);
+})();
+</script>
+</body>
+</html>

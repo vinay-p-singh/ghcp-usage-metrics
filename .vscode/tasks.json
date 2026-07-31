@@ -1,124 +1,211 @@
 {
-  "version": "2.0.0",
-  "tasks": [
-    {
-      "label": "Generate dashboard",
-      "type": "process",
-      "command": "python",
-      "args": ["usage.py"],
-      "options": { "cwd": "${workspaceFolder}" },
-      "problemMatcher": [],
-      "group": { "kind": "build", "isDefault": true },
-      "presentation": { "reveal": "always", "panel": "shared", "clear": true }
-    },
-    {
-      "label": "Open dashboard in browser",
-      "type": "process",
-      "windows": {
-        "command": "powershell",
-        "args": ["-NoProfile", "-Command", "Start-Process", "'${workspaceFolder}/out/dashboard.html'"]
-      },
-      "linux": { "command": "xdg-open", "args": ["${workspaceFolder}/out/dashboard.html"] },
-      "osx": { "command": "open", "args": ["${workspaceFolder}/out/dashboard.html"] },
-      "problemMatcher": [],
-      "presentation": { "reveal": "silent", "panel": "shared" }
-    },
-    {
-      "label": "Launch dashboard",
-      "dependsOrder": "sequence",
-      "dependsOn": ["Generate dashboard", "Open dashboard in browser"],
-      "problemMatcher": [],
-      "group": "build",
-      "detail": "Regenerate out/dashboard.html and open it in the default browser."
-    },
-    {
-      "label": "Run tests",
-      "type": "process",
-      "command": "python",
-      "args": ["-m", "pytest", "-q"],
-      "options": { "cwd": "${workspaceFolder}" },
-      "problemMatcher": [],
-      "group": { "kind": "test", "isDefault": true },
-      "presentation": { "reveal": "always", "panel": "shared", "clear": true }
-    },
-    {
-      "label": "Run JS tests",
-      "type": "process",
-      "command": "node",
-      "args": ["--test", "tests/js/*.test.js"],
-      "options": { "cwd": "${workspaceFolder}" },
-      "problemMatcher": [],
-      "group": "test",
-      "detail": "Unit tests for the pure dashboard helpers in web/js/00-lib.js."
-    },
-    {
-      "label": "Sync skill bundle",
-      "type": "process",
-      "command": "python",
-      "args": ["scripts/bundle_skill.py"],
-      "options": { "cwd": "${workspaceFolder}" },
-      "problemMatcher": [],
-      "detail": "Copy usage.py, build_dashboard.py, ghcp/ and web/ into skills/ and ~/.copilot/skills/."
-    },
-    {
-      "label": "Check bundle sync",
-      "type": "process",
-      "command": "python",
-      "args": ["scripts/bundle_skill.py", "--check"],
-      "options": { "cwd": "${workspaceFolder}" },
-      "problemMatcher": [],
-      "detail": "Report any copy that has drifted from the source, without changing anything."
-    },
-    {
-      "label": "Bundle Python into extension",
-      "type": "process",
-      "command": "node",
-      "args": ["extension/scripts/bundle.js"],
-      "options": { "cwd": "${workspaceFolder}" },
-      "problemMatcher": [],
-      "presentation": { "reveal": "always", "panel": "shared" }
-    },
-    {
-      "label": "Compile extension",
-      "type": "shell",
-      "command": "npm run compile",
-      "options": { "cwd": "${workspaceFolder}/extension" },
-      "problemMatcher": ["$tsc"],
-      "presentation": { "reveal": "silent", "panel": "shared" }
-    },
-    {
-      "label": "Package extension (.vsix)",
-      "type": "shell",
-      "command": "npm run package",
-      "options": { "cwd": "${workspaceFolder}/extension" },
-      "problemMatcher": ["$tsc"],
-      "group": "build",
-      "presentation": { "reveal": "always", "panel": "shared", "clear": true },
-      "detail": "Bundle usage.py + ghcp/ into the extension, compile, and build the .vsix."
-    },
-    {
-      "label": "Install extension (.vsix)",
-      "type": "shell",
-      "windows": {
-        "command": "code --uninstall-extension local.ghcp-usage-metrics 2>$null; code --install-extension (Get-ChildItem '${workspaceFolder}/extension/*.vsix' | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName --force; $keep = ((Get-Content \"$HOME/.vscode/extensions/extensions.json\" -Raw | ConvertFrom-Json) | Where-Object { $_.identifier.id -eq 'local.ghcp-usage-metrics' }).location.path -replace '.*/',''; Get-ChildItem \"$HOME/.vscode/extensions\" -Directory -Filter 'local.ghcp-usage-metrics-*' | Where-Object { $_.Name -ne $keep } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue"
-      },
-      "linux": {
-        "command": "code --uninstall-extension local.ghcp-usage-metrics || true; code --install-extension \"$(ls -t ${workspaceFolder}/extension/*.vsix | head -n1)\" --force"
-      },
-      "osx": {
-        "command": "code --uninstall-extension local.ghcp-usage-metrics || true; code --install-extension \"$(ls -t ${workspaceFolder}/extension/*.vsix | head -n1)\" --force"
-      },
-      "problemMatcher": [],
-      "presentation": { "reveal": "always", "panel": "shared" },
-      "detail": "Uninstall any existing build first, then install the newest .vsix. Installing over the top leaves one orphaned folder per version, and after a downgrade VS Code can load the wrong one."
-    },
-    {
-      "label": "Build, package & install extension",
-      "dependsOrder": "sequence",
-      "dependsOn": ["Package extension (.vsix)", "Install extension (.vsix)"],
-      "problemMatcher": [],
-      "group": "build",
-      "detail": "Full extension pipeline: bundle Python + ghcp/, compile, build .vsix, then install it."
-    }
-  ]
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Generate dashboard",
+			"type": "process",
+			"command": "python",
+			"args": [
+				"usage.py"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"clear": true
+			}
+		},
+		{
+			"label": "Open dashboard in browser",
+			"type": "process",
+			"windows": {
+				"command": "powershell",
+				"args": [
+					"-NoProfile",
+					"-Command",
+					"Start-Process",
+					"'${workspaceFolder}/out/dashboard.html'"
+				]
+			},
+			"linux": {
+				"command": "xdg-open",
+				"args": [
+					"${workspaceFolder}/out/dashboard.html"
+				]
+			},
+			"osx": {
+				"command": "open",
+				"args": [
+					"${workspaceFolder}/out/dashboard.html"
+				]
+			},
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "silent",
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "Launch dashboard",
+			"dependsOrder": "sequence",
+			"dependsOn": [
+				"Generate dashboard",
+				"Open dashboard in browser"
+			],
+			"problemMatcher": [],
+			"group": "build",
+			"detail": "Regenerate out/dashboard.html and open it in the default browser."
+		},
+		{
+			"label": "Run tests",
+			"type": "process",
+			"command": "python",
+			"args": [
+				"-m",
+				"pytest",
+				"-q"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [],
+			"group": {
+				"kind": "test",
+				"isDefault": true
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"clear": true
+			}
+		},
+		{
+			"label": "Run JS tests",
+			"type": "process",
+			"command": "node",
+			"args": [
+				"--test",
+				"tests/js/*.test.js"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [],
+			"group": "test",
+			"detail": "Unit tests for the pure dashboard helpers in web/js/00-lib.js."
+		},
+		{
+			"label": "Sync skill bundle",
+			"type": "process",
+			"command": "python",
+			"args": [
+				"scripts/bundle_skill.py"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [],
+			"detail": "Copy usage.py, build_dashboard.py, ghcp/ and web/ into skills/ and ~/.copilot/skills/."
+		},
+		{
+			"label": "Check bundle sync",
+			"type": "process",
+			"command": "python",
+			"args": [
+				"scripts/bundle_skill.py",
+				"--check"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [],
+			"detail": "Report any copy that has drifted from the source, without changing anything."
+		},
+		{
+			"label": "Bundle Python into extension",
+			"type": "process",
+			"command": "node",
+			"args": [
+				"extension/scripts/bundle.js"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "Compile extension",
+			"type": "shell",
+			"command": "npm run compile",
+			"options": {
+				"cwd": "${workspaceFolder}/extension"
+			},
+			"problemMatcher": [
+				"$tsc"
+			],
+			"presentation": {
+				"reveal": "silent",
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "Package extension (.vsix)",
+			"type": "shell",
+			"command": "npm run package",
+			"options": {
+				"cwd": "${workspaceFolder}/extension"
+			},
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build",
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"clear": true
+			},
+			"detail": "Bundle usage.py + ghcp/ into the extension, compile, and build the .vsix."
+		},
+		{
+			"label": "Install extension (.vsix)",
+			"type": "shell",
+			"windows": {
+				"command": "code --uninstall-extension local.ghcp-usage-metrics 2>$null; code --install-extension (Get-ChildItem '${workspaceFolder}/extension/*.vsix' | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName --force; $keep = ((Get-Content \"$HOME/.vscode/extensions/extensions.json\" -Raw | ConvertFrom-Json) | Where-Object { $_.identifier.id -eq 'local.ghcp-usage-metrics' }).location.path -replace '.*/',''; Get-ChildItem \"$HOME/.vscode/extensions\" -Directory -Filter 'local.ghcp-usage-metrics-*' | Where-Object { $_.Name -ne $keep } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue"
+			},
+			"linux": {
+				"command": "code --uninstall-extension local.ghcp-usage-metrics || true; code --install-extension \"$(ls -t ${workspaceFolder}/extension/*.vsix | head -n1)\" --force"
+			},
+			"osx": {
+				"command": "code --uninstall-extension local.ghcp-usage-metrics || true; code --install-extension \"$(ls -t ${workspaceFolder}/extension/*.vsix | head -n1)\" --force"
+			},
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared"
+			},
+			"detail": "Uninstall any existing build first, then install the newest .vsix. Installing over the top leaves one orphaned folder per version, and after a downgrade VS Code can load the wrong one."
+		},
+		{
+			"label": "Build, package & install extension",
+			"dependsOrder": "sequence",
+			"dependsOn": [
+				"Package extension (.vsix)",
+				"Install extension (.vsix)"
+			],
+			"problemMatcher": [],
+			"group": "build",
+			"detail": "Full extension pipeline: bundle Python + ghcp/, compile, build .vsix, then install it."
+		}
+	]
 }
