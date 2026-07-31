@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ghcp-usage-metrics — what we built, how, and why (short)</title>
+<style>
+  :root{
+    --bg:#0d1117; --surface:#161b22; --surface-2:#1c2128; --surface-3:#21262d;
+    --fg:#e6edf3; --fg-muted:#9aa7b4; --fg-subtle:#6e7b8a;
+    --border:#30363d; --border-subtle:#242a31;
+    --accent:#58a6ff; --accent-soft:rgba(88,166,255,.14); --accent-border:rgba(88,166,255,.4);
+    --good:#3fb950; --warn:#d29922; --bad:#f85149;
+    --radius:10px; --radius-sm:6px;
+    --fs-label:.68rem; --fs-sm:.86rem; --fs-base:1rem; --fs-lg:1.35rem; --fs-xl:2.6rem;
+    --mono:"Cascadia Code",Consolas,"SF Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;height:100%}
+  body{
+    background:var(--bg); color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased; overflow:hidden;
+  }
+
+  #deck{height:100vh;position:relative}
+  .slide{position:absolute; inset:0; display:none; padding:4vh 5vw 6vh; overflow:hidden;
+         animation:fade .22s ease-out}
+  .slide.active{display:block}
+  .inner{display:flex; flex-direction:column; justify-content:center; min-height:100%;
+         transform-origin:top center}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+  .eyebrow{font-size:var(--fs-label); letter-spacing:.13em; text-transform:uppercase;
+           color:var(--accent); font-weight:600; margin:0 0 .7rem}
+  .collab-note{display:inline-block; margin:.25rem 0 .7rem; padding:.38rem .65rem;
+               border-left:3px solid var(--accent); background:color-mix(in srgb,var(--accent) 10%,transparent);
+               color:var(--fg); font-size:var(--fs-label); font-weight:600}
+  h1{font-size:clamp(1.9rem,4vw,3.1rem); line-height:1.08; margin:0 0 1rem; letter-spacing:-.02em}
+  h2{font-size:clamp(1.4rem,2.6vw,2.05rem); line-height:1.15; margin:0 0 1.1rem; letter-spacing:-.015em}
+  h3{font-size:.98rem; margin:0 0 .5rem}
+  p{margin:0 0 .8rem; line-height:1.55; color:var(--fg-muted); max-width:62ch}
+  p.lead{font-size:var(--fs-lg); color:var(--fg); max-width:38ch; line-height:1.35}
+  strong{color:var(--fg); font-weight:600}
+  em{color:var(--accent); font-style:normal; font-weight:600}
+  code{font-family:var(--mono); font-size:.86em; background:var(--surface-3);
+       padding:.12em .38em; border-radius:4px; color:#a5d6ff}
+  ul{margin:0 0 .8rem; padding-left:1.05rem; line-height:1.55; color:var(--fg-muted)}
+  li{margin-bottom:.4rem} li::marker{color:var(--accent)}
+
+  .cols{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:1.2rem; align-items:start}
+  .cols.two{grid-template-columns:1fr 1fr}
+  .cols.side{grid-template-columns:1.15fr .85fr; gap:1.6rem}
+  .cols.narrow{grid-template-columns:.8fr 1.2fr; gap:1.6rem}
+
+  .card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+        padding:.9rem 1rem}
+  .card.accent{border-left:3px solid var(--accent)}
+  .card.good{border-left:3px solid var(--good)}
+  .card.bad{border-left:3px solid var(--bad)}
+  .card p{margin-bottom:0; font-size:var(--fs-sm)}
+  .card .k{font-size:var(--fs-label); letter-spacing:.1em; text-transform:uppercase;
+           color:var(--fg-subtle); display:block; margin-bottom:.3rem}
+  .card .v{font-size:1.7rem; font-weight:650; color:var(--accent); line-height:1.1;
+           font-variant-numeric:tabular-nums}
+  .card .sub{font-size:var(--fs-label); color:var(--fg-subtle); margin-top:.25rem; display:block}
+
+  table{border-collapse:collapse; width:100%; font-size:var(--fs-sm); margin-bottom:.8rem}
+  th{text-align:left; font-size:var(--fs-label); letter-spacing:.09em; text-transform:uppercase;
+     color:var(--fg-subtle); font-weight:600; padding:.45rem .6rem; border-bottom:1px solid var(--border)}
+  td{padding:.5rem .6rem; border-bottom:1px solid var(--border-subtle); color:var(--fg-muted);
+     vertical-align:top; line-height:1.45}
+  td:first-child{color:var(--fg); font-weight:500}
+  tr:last-child td{border-bottom:none}
+
+  blockquote{margin:0 0 1rem; padding:.8rem 1.1rem; background:var(--accent-soft);
+             border-left:3px solid var(--accent); border-radius:0 var(--radius-sm) var(--radius-sm) 0;
+             color:var(--fg); font-size:var(--fs-lg); line-height:1.4; max-width:48ch}
+
+  /* Screenshots of the running dashboard. */
+  .shot{display:block; width:100%; border:1px solid var(--border); border-radius:var(--radius-sm);
+        background:var(--surface)}
+  .shot.sm{max-height:30vh; object-fit:cover; object-position:top}
+  figure{margin:0}
+  figcaption{font-size:var(--fs-label); color:var(--fg-subtle); margin-top:.4rem; line-height:1.5}
+  .shot-grid{display:grid; grid-template-columns:1fr 1fr; gap:.9rem}
+
+  /* Flow diagram: three stages with arrows between them. */
+  .flow{display:grid; grid-template-columns:1fr auto 1.15fr auto 1fr; gap:.7rem; align-items:stretch;
+        margin-bottom:1rem}
+  .stage{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+         padding:.85rem .9rem}
+  .stage.mid{border-color:var(--accent-border); background:var(--accent-soft)}
+  .stage h3{font-size:var(--fs-label); letter-spacing:.1em; text-transform:uppercase;
+            color:var(--fg-subtle); margin-bottom:.6rem}
+  .stage.mid h3{color:var(--accent)}
+  .node{font-family:var(--mono); font-size:.72rem; color:var(--fg-muted); background:var(--surface-2);
+        border:1px solid var(--border-subtle); border-radius:var(--radius-sm);
+        padding:.35rem .5rem; margin-bottom:.35rem; line-height:1.4}
+  .node b{color:var(--fg); font-weight:600; display:block}
+  .node:last-child{margin-bottom:0}
+  .arrow{align-self:center; color:var(--accent); font-size:1.3rem; font-weight:600}
+
+  pre{font-family:var(--mono); font-size:.75rem; line-height:1.55; margin:0 0 .8rem;
+      background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm);
+      padding:.8rem .9rem; overflow-x:auto; color:var(--fg-muted); white-space:pre}
+  pre .hi{color:var(--accent)} pre .dim{color:var(--fg-subtle)}
+  pre .grn{color:var(--good)} pre .red{color:var(--bad)}
+
+  .tag{display:inline-block; font-size:var(--fs-label); letter-spacing:.06em; padding:.15rem .45rem;
+       border-radius:999px; border:1px solid var(--border); color:var(--fg-subtle);
+       background:var(--surface-2); margin-right:.3rem}
+
+  .footnote{margin-top:1.6rem; padding-top:.8rem; font-size:var(--fs-label); color:var(--fg-subtle);
+            border-top:1px solid var(--border-subtle); line-height:1.5}
+
+  .vocab{margin-top:1.4rem; padding-top:.7rem; border-top:1px dashed var(--border);
+         display:flex; flex-wrap:wrap; gap:.35rem 1.5rem; font-size:var(--fs-label);
+         line-height:1.5; color:var(--fg-subtle)}
+  .vocab::before{content:"Vocabulary"; flex:0 0 100%; letter-spacing:.14em; text-transform:uppercase;
+                 font-weight:600; color:var(--accent); opacity:.8; margin-bottom:.1rem}
+  .vocab span{max-width:44ch}
+  .vocab b{color:var(--fg-muted); font-weight:600}
+  .vocab b::after{content:" — "; font-weight:400; color:var(--fg-subtle)}
+  .vocab + .footnote{margin-top:.9rem}
+
+  #bar{position:fixed; left:0; bottom:0; height:3px; background:var(--accent); width:0;
+       transition:width .2s; z-index:20}
+  #hud{position:fixed; right:1.4rem; bottom:1rem; font-size:var(--fs-label); color:var(--fg-subtle);
+       font-variant-numeric:tabular-nums; letter-spacing:.08em; z-index:20}
+  #hud b{color:var(--fg-muted); font-weight:600}
+  #hint{position:fixed; left:1.4rem; bottom:1rem; font-size:var(--fs-label); color:var(--fg-subtle); z-index:20}
+  #hint kbd{font-family:var(--mono); background:var(--surface-3); border:1px solid var(--border);
+            border-radius:4px; padding:.05rem .3rem; color:var(--fg-muted)}
+
+  @media print{
+    body{overflow:visible}
+    .slide{display:block !important; position:relative; page-break-after:always; height:100vh}
+    #bar,#hud,#hint{display:none}
+  }
+</style>
+</head>
+<body>
+
+<div id="deck">
+
+<!-- ══════════════ 1 ══════════════ -->
+<section class="slide active">
+  <p class="eyebrow">GitHub Copilot usage metrics.</p>
+  <h1>What we built, how we built it,<br />and why each decision was made</h1>
+  <p class="collab-note">In this talk, “we” means Vinay + GitHub Copilot.</p>
+  <p class="lead" style="max-width:72ch">A local extractor and dashboard that reports what GitHub actually recorded about
+  your Copilot usage — and a working test of one idea: <em>software fundamentals matter more in
+  the AI era, not less</em>.</p>
+  <div class="cols" style="margin-top:1.5rem">
+    <div class="card accent"><span class="k">Credits to build this tool</span><span class="v">29,487</span>
+      <span class="sub">14.6% of everything it has ever recorded</span></div>
+    <div class="card accent"><span class="k">Requests, over 6 days</span><span class="v">1,206</span>
+      <span class="sub">22 sessions · 24–30 July</span></div>
+    <div class="card accent"><span class="k">Context read back</span><span class="v">345M</span>
+      <span class="sub">input tokens · 1.5M written out</span></div>
+    <div class="card accent"><span class="k">Tests holding it up</span><span class="v">242</span>
+      <span class="sub">110 Python · 132 JavaScript</span></div>
+  </div>
+  <p style="margin-top:1.1rem;max-width:none"><strong>Those are this project's own numbers, measured
+  by itself.</strong> They work out at <em>24.45 credits per request</em> — 65% above my everyday
+  average of 14.8, because a refactor this deep re-reads the codebase on almost every turn. I only
+  know that because the tool told me.</p>
+  <div class="footnote">Screenshots throughout are the real dashboard on real data, with project
+  names replaced by stand-ins — every number, model, agent, skill and date is untouched.</div>
+</section>
+
+<!-- ══════════════ 2 ══════════════ -->
+<section class="slide">
+  <p class="eyebrow">The principle, compressed</p>
+  <h2>Code is not cheap — so fundamentals decide what AI can do for you</h2>
+  <div class="cols narrow">
+    <div>
+      <blockquote>AI can make writing code cheap.<br />It does not make <em>owning</em> code cheap.</blockquote>
+      <p>Regenerating a codebase from a spec without reading it produces worse code each pass.
+      That is <strong>software entropy</strong>, and it is not new.</p>
+      <p>A codebase that is hard to change cannot absorb the speed AI offers. So a good codebase
+      matters more than ever — and that is a fundamentals problem.</p>
+      <p style="color:var(--fg)"><strong>AI is an excellent tactical programmer. The strategic
+      layer stays yours.</strong></p>
+    </div>
+    <div>
+      <table>
+        <thead><tr><th style="width:30%">Failure mode</th><th>The fix, and what we used</th></tr></thead>
+        <tbody>
+          <tr><td>It built the wrong thing</td><td>Reach a <em>shared design concept</em> before producing any plan</td></tr>
+          <tr><td>It is too verbose</td><td>A <em>ubiquitous language</em> — one agreed word per concept → <code>DOMAIN.md</code></td></tr>
+          <tr><td>It doesn't work</td><td>Fast <em>feedback loops</em> and TDD, because the feedback rate is the speed limit</td></tr>
+          <tr><td>Testing is painful</td><td><em>Deep modules</em> — lots of functionality behind a simple interface</td></tr>
+          <tr><td>Your brain can't keep up</td><td>Design the interface, <em>delegate the implementation</em>, verify at the boundary</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="vocab">
+    <span><b>software entropy</b>the tendency of a codebase to drift into disorder as changes pile up</span>
+    <span><b>ubiquitous language</b>one agreed word per concept, used the same way in talk, docs and code</span>
+    <span><b>feedback loop</b>anything that quickly tells you whether the last change was right</span>
+    <span><b>deep module</b>a lot of functionality hidden behind a small, simple interface</span>
+  </div>
+  <div class="footnote">After "Software Fundamentals Matter More Than Ever" — Matt Pocock. The long
+  version of this argument is in <code>talk/index.html</code>.</div>
+</section>
+
+<!-- ══════════════ 3 ══════════════ -->
+<section class="slide">
+  <p class="eyebrow">What we built</p>
+  <h2>Every Copilot request you have made, accounted for locally</h2>
+  <div class="cols side">
+    <figure>
+      <img class="shot" src="img/overview.png" alt="Dashboard overview: credit, request and token totals, credits per day, and top projects" />
+      <figcaption>Overview — headline totals, credits per day, and where the spend went. Every
+      control on the left re-scopes every figure on the right.</figcaption>
+    </figure>
+    <div>
+      <h3>The questions it answers</h3>
+      <ul>
+        <li>What did I spend, in <strong>GitHub's own credits</strong>, and on which days?</li>
+        <li>Which <strong>project</strong> costs the most — and which quietly cost nothing?</li>
+        <li>Which <strong>model</strong> is 71% of the bill?</li>
+        <li>Which <strong>agent or subagent</strong> is expensive per request?</li>
+        <li>Which <strong>skills</strong> actually get used?</li>
+        <li>What is <strong>missing</strong>, and why?</li>
+      </ul>
+      <div class="card accent">
+        <span class="k">Three harnesses, one picture</span>
+        <p>VS Code 90.5% of requests · Copilot CLI 9.5% · Claude Code the remainder. No official
+        API gives per-project or per-subagent detail, so local logs are the only source.</p>
+      </div>
+    </div>
+  </div>
+  <div class="vocab">
+    <span><b>credit / AIU</b>GitHub's own unit of AI usage, recorded per request in its logs</span>
+    <span><b>harness</b>the tool a request came from — VS Code, Copilot CLI, Claude Code</span>
+    <span><b>re-scope</b>recompute every figure on screen against the current selection</span>
+  </div>
+</section>
+
+<!-- ══════════════ 4 ══════════════ -->
+<section class="slide">
+  <p class="eyebrow">How it works</p>
+  <h2>Logs in, one decision point, three surfaces out</h2>
+  <div class="flow">
+    <div class="stage">
+      <h3>Local logs · read-only</h3>
+      <div class="node"><b>VS Code</b>debug-logs · chatSessions · session-store.db</div>
+      <div class="node"><b>Copilot CLI</b>~/.copilot/*.db</div>
+      <div class="node"><b>Claude Code</b>~/.claude/projects/*.jsonl</div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="stage mid">
+      <h3>Python · the only place numbers are decided</h3>
+      <div class="node"><b>ghcp/scan/*</b>one module per harness</div>
+      <div class="node"><b>ghcp/billing</b>parse and cache token payloads</div>
+      <div class="node"><b>ghcp/model</b>buckets, merge, build_projects</div>
+      <div class="node"><b>ghcp/diagnostics</b>what was read, skipped, failed</div>
+      <div class="node"><b>ghcp/report</b>inject data into the assembled page</div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="stage">
+      <h3>Artifacts and surfaces</h3>
+      <div class="node"><b>dashboard.html</b>self-contained, opens from disk</div>
+      <div class="node"><b>projects.json</b>for the chat skill's query CLI</div>
+      <div class="node"><b>diagnostics.json</b>coverage and failures</div>
+      <div class="node"><b>consumed by</b>browser · VS Code extension · chat skill</div>
+    </div>
+  </div>
+  <div class="cols">
+    <div class="card accent"><span class="k">Nothing leaves the machine</span>
+      <p>Read-only on local files. No upload, no telemetry, no network call.</p></div>
+    <div class="card accent"><span class="k">Failure is local</span>
+      <p>A malformed line loses that line, not the scan. It is counted and named in Diagnostics.</p></div>
+    <div class="card accent"><span class="k">Zero dependencies</span>
+      <p>Standard library only, so there is nothing to install and nothing to trust.</p></div>
+  </div>
+  <div class="vocab">
+    <span><b>read-only</b>the tool opens log files and never writes to them</span>
+    <span><b>self-contained</b>one HTML file with the data inside it; no server, no CDN</span>
+    <span><b>diagnostics</b>the tool's own report on what it managed to read and what it could not</span>
+  </div>
+</section>
+
+<!-- ══════════════ 5 ══════════════ -->
+<section class="slide">
+  <p class="eyebrow">Ways of working with the metrics</p>
+  <h2>One set of facts, sliced many ways — and made to prove itself</h2>
+  <div class="cols side">
+    <div>
+<pre><span class="dim">Project</span>  <span class="dim">(aggregate root — the only thing listed)</span>
+  │
+  └── one record per <span class="hi">harness</span>   vscode │ cli │ claude
+        ├── by_day     date            → sessions, requests, in, out, aiu
+        ├── by_model   model           → requests, in, out, aiu
+        ├── by_agent   agent           → requests, in, out, aiu
+        ├── by_am      agent × model
+        ├── <span class="hi">by_dm      date × model</span>    <span class="dim">← unlocked full filtering</span>
+        ├── by_sdm     session × date × model
+        ├── by_skill   skill
+        └── by_tool / by_lang</pre>
+      <p><strong>Every dimension is the same requests, sliced differently.</strong> That is why the
+      totals must agree — and why disagreement means double-counting, not merely untidiness.</p>
+    </div>
+    <div>
+      <div class="card good" style="margin-bottom:.9rem">
+        <span class="k">The rule that proves it</span>
+        <p><code>by_dm</code> must decompose on <em>both</em> axes: summed per date it equals
+        <code>by_day</code>; summed per model it equals <code>by_model</code>. Checked against real
+        data on every run.</p>
+      </div>
+      <div class="card" style="margin-bottom:.9rem">
+        <span class="k">27 invariants, written down</span>
+        <p>Each names the test that enforces it — or is explicitly marked <span class="tag">NOT ENFORCED</span>.
+        There is no third category, so a rule can never quietly become false.</p>
+      </div>
+      <div class="card accent">
+        <span class="k">What a session is not</span>
+        <p>One session can span models, so <code>by_dm</code> deliberately carries no session count.
+        Under a model filter the Sessions column shows <strong>—</strong> rather than a number nobody
+        could defend.</p>
+      </div>
+    </div>
+  </div>
+  <div class="vocab">
+    <span><b>aggregate root</b>the single object everything else hangs off — here, the project</span>
+    <span><b>dimension</b>a way of slicing the same facts: by day, by model, by agent</span>
+    <span><b>decompose</b>break a total apart along an axis and confirm the parts still add back up</span>
+    <span><b>invariant</b>a rule that must stay true no matter what the data does</span>
+  </div>
+</section>
+
+<!-- ══════════════ 6 ══════════════ -->
+<section class="slide">
+  <p class="eyebrow">Why these decisions</p>
+  <h2>Five choices, and what each one cost</h2>
+  <table>
+    <thead><tr><th style="width:20%">Decision</th><th style="width:30%">Why</th><th>What it cost, honestly</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Show only what was recorded</td>
+        <td>The tool once estimated missing credits. The totals looked better and were wrong, with no way to tell which parts.</td>
+        <td>Removing estimation <strong>dropped the headline by ~25,000 credits</strong>. That trade is the whole product — a gap is now reported as a gap.</td>
+      </tr>
+      <tr>
+        <td>Split into deep modules</td>
+        <td>Two files were the entire system, so nothing could be tested or delegated safely.</td>
+        <td><code>usage.py</code> 1001 → 216 lines, <code>build_dashboard.py</code> 2249 → 50, plus 24 focused modules. More files to navigate, in exchange for changeability.</td>
+      </tr>
+      <tr>
+        <td>Write the test first</td>
+        <td>We were not doing this. Tests written after the code record what it <em>does</em>, including its mistakes.</td>
+        <td>A false claim was documented three times <em>and pinned by a passing test</em>. Testing the claim instead exposed <code>by_dm</code> — a whole capability we had declared impossible.</td>
+      </tr>
+      <tr>
+        <td>Delete a fallback rather than name it</td>
+        <td>An unknown-model placeholder had never once fired across 51 projects and 14,119 requests.</td>
+        <td>It now raises and lands in Diagnostics naming the file. A format change announces itself instead of hiding in a bucket nobody can read.</td>
+      </tr>
+      <tr>
+        <td>Make drift fail a test</td>
+        <td>The tool ships from one source to four places, and none of them notice when they fall behind.</td>
+        <td>A stale copy is a red test, not wrong numbers weeks later. Costs one command after every edit.</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="vocab">
+    <span><b>fallback</b>a default used when the expected value is missing; very good at hiding real problems</span>
+    <span><b>drift</b>copies of the same file slowly diverging until they report different answers</span>
+    <span><b>pinned by a test</b>a wrong behaviour protected by a passing test, so fixing it looks like breaking something</span>
+  </div>
+</section>
+
+<!-- ══════════════ 7 ══════════════ -->
+<section class="slide">
+  <p class="eyebrow">What it gives you · 1 of 2</p>
+  <h2>Where the credits actually go</h2>
+  <figure>
+    <img class="shot" src="img/agents.png" alt="Agents tab: cost signal cards, then base agents and subagents ranked by total credits and credits per request" />
+    <figcaption>Base agents are ranked separately from subagents, because comparing a harness to a
+    one-purpose subagent compares two different things. Any row expands to its model split.</figcaption>
+  </figure>
+  <div class="cols" style="margin-top:1rem">
+    <div class="card accent"><span class="k">Everyday chat</span><span class="v">90.0%</span>
+      <span class="sub">of all credits · 12,326 requests at 14.8 each</span></div>
+    <div class="card accent"><span class="k">All subagents together</span><span class="v">5.5%</span>
+      <span class="sub">of credits, from just 474 requests</span></div>
+    <div class="card accent"><span class="k">Priciest per request</span><span class="v">30.98</span>
+      <span class="sub">Plan Validator · 2.1× the everyday chat agent</span></div>
+  </div>
+  <p style="margin-top:.9rem;max-width:none"><strong>The finding worth acting on:</strong> subagents
+  are a rounding error in total spend and roughly <em>1.6× the price per request</em>. Worth it for
+  research and review; not for work the main agent already does well.</p>
+  <div class="vocab">
+    <span><b>base agent</b>the harness itself — VS Code chat, Copilot CLI, Claude Code</span>
+    <span><b>subagent</b>a separate agent launched to do one job, with its own log and its own credits</span>
+  </div>
+</section>
+
+<!-- ══════════════ 8 ══════════════ -->
+<section class="slide">
+  <p class="eyebrow">What it gives you · 2 of 2</p>
+  <h2>What is missing, and when it happened</h2>
+  <div class="shot-grid" style="grid-template-columns:1.25fr .75fr; align-items:start">
+    <figure>
+      <img class="shot" src="img/diagnostics.png" alt="Diagnostics tab: scan health, and requests with no token data listed per project with a reason" />
+      <figcaption><strong>Diagnostics.</strong> 625 of 14,389 requests — 4.3% — carry no token
+      payload. Each is listed per project <em>with the reason</em>, rather than quietly dropped or
+      filled in with a plausible guess.</figcaption>
+    </figure>
+    <div>
+      <figure>
+        <img class="shot" src="img/calendar.png" alt="Activity calendar heat map showing requests per day across the scanned range" />
+        <figcaption><strong>Calendar.</strong> Requests per day across 73 active days. Click one
+        day, or drag a range, and every figure re-scopes to it.</figcaption>
+      </figure>
+      <div class="card accent" style="margin-top:1rem">
+        <span class="k">Forecast</span>
+        <p>Projects the run rate against a budget you set — and labels itself a projection
+        everywhere it appears, so an estimate is never mistaken for something GitHub recorded.</p>
+      </div>
+      <div class="card" style="margin-top:.7rem">
+        <span class="k">Scan health, every run</span>
+        <p>697 files read, 0 deferred, 4 failures named with their file. Nothing is swallowed
+        silently.</p>
+      </div>
+    </div>
+  </div>
+  <div class="vocab">
+    <span><b>token payload</b>the input and output token counts a request should carry; some sources never wrote them</span>
+    <span><b>coverage</b>how much of the recorded activity we could account for in full</span>
+  </div>
+  <div class="footnote">
+    Runs as <code>python usage.py</code>, as a VS Code extension, or as a chat skill that answers
+    questions from the same artifact · github.com/vinay199129/ghcp-usage-metrics ·
+    long-form argument in <code>talk/index.html</code>, deep dive in <code>ARCHITECTURE.md</code>
+    and <code>DOMAIN.md</code>
+  </div>
+</section>
+
+</div>
+
+<div id="bar"></div>
+<div id="hud"><b id="cur">1</b> / <span id="tot">8</span></div>
+<div id="hint"><kbd>←</kbd> <kbd>→</kbd> navigate · <kbd>F</kbd> fullscreen · <kbd>P</kbd> print to PDF</div>
+
+<script>
+(function () {
+  var slides = Array.prototype.slice.call(document.querySelectorAll(".slide"));
+  var bar = document.getElementById("bar");
+  var cur = document.getElementById("cur");
+  document.getElementById("tot").textContent = slides.length;
+  var i = 0;
+
+  slides.forEach(function (s) {
+    var inner = document.createElement("div");
+    inner.className = "inner";
+    while (s.firstChild) { inner.appendChild(s.firstChild); }
+    s.appendChild(inner);
+  });
+
+  // Shrink a slide until it fits rather than letting it scroll away off-screen.
+  function fit(s) {
+    var inner = s.querySelector(".inner");
+    var wasHidden = !s.classList.contains("active");
+    if (wasHidden) { s.style.visibility = "hidden"; s.classList.add("active"); }
+    inner.style.transform = "none";
+    inner.style.minHeight = "0";
+    var cs = getComputedStyle(s);
+    var avail = s.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    var need = inner.scrollHeight;
+    inner.style.minHeight = "";
+    var k = need > avail ? Math.max(0.5, avail / need) : 1;
+    inner.style.transform = k < 1 ? "scale(" + k + ")" : "none";
+    if (wasHidden) { s.classList.remove("active"); s.style.visibility = ""; }
+  }
+
+  function fitAll() { slides.forEach(fit); }
+
+  function show(n) {
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach(function (s, k) { s.classList.toggle("active", k === i); });
+    fit(slides[i]);
+    bar.style.width = ((i + 1) / slides.length * 100) + "%";
+    cur.textContent = i + 1;
+    try { location.hash = "s" + (i + 1); } catch (e) { /* file:// without history */ }
+  }
+
+  var resizeTimer;
+  window.addEventListener("resize", function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () { fit(slides[i]); }, 120);
+  });
+  window.addEventListener("beforeprint", fitAll);
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowRight" || e.key === "PageDown" || e.key === " ") { e.preventDefault(); show(i + 1); }
+    else if (e.key === "ArrowLeft" || e.key === "PageUp") { e.preventDefault(); show(i - 1); }
+    else if (e.key === "Home") { show(0); }
+    else if (e.key === "End") { show(slides.length - 1); }
+    else if (e.key === "f" || e.key === "F") {
+      if (document.fullscreenElement) { document.exitFullscreen(); }
+      else { document.documentElement.requestFullscreen(); }
+    }
+    else if (e.key === "p" || e.key === "P") { window.print(); }
+  });
+
+  document.addEventListener("click", function (e) {
+    if (e.target.closest("a, pre, table, img")) { return; }
+    show(e.clientX < window.innerWidth * 0.25 ? i - 1 : i + 1);
+  });
+
+  // Images decode after boot, so re-measure once they have real dimensions.
+  window.addEventListener("load", function () { fit(slides[i]); });
+
+  var start = parseInt((location.hash || "").replace("#s", ""), 10);
+  show(isNaN(start) ? 0 : start - 1);
+})();
+</script>
+</body>
+</html>
