@@ -8,12 +8,12 @@
   "icon": "media/icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/vinay199129/ghcp-usage-metrics.git"
+    "url": "https://github.com/vinay-p-singh/ghcp-usage-metrics.git"
   },
   "bugs": {
-    "url": "https://github.com/vinay199129/ghcp-usage-metrics/issues"
+    "url": "https://github.com/vinay-p-singh/ghcp-usage-metrics/issues"
   },
-  "homepage": "https://github.com/vinay199129/ghcp-usage-metrics#readme",
+  "homepage": "https://github.com/vinay-p-singh/ghcp-usage-metrics#readme",
   "engines": {
     "vscode": "^1.85.0"
   },

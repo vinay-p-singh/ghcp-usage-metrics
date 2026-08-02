@@ -335,7 +335,7 @@ soon as a model filter is active because they cannot match a selected model.
 A project name comes from the git remote slug where one exists
 (`owner/repo`), otherwise the folder or cwd leaf. `_canon` merges rows that are
 the same project reached by different paths — which is why this repo's own rows
-consolidated under `vinay199129/ghcp-usage-metrics` once it gained a remote.
+consolidated under `vinay-p-singh/ghcp-usage-metrics` once it gained a remote.
 
 ---
 

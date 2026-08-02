@@ -26,7 +26,7 @@ SRC = os.path.join(ROOT, "out")
 DST = os.path.join(ROOT, "talk", "_shots")
 
 # The project this deck is about stays named; it is already public.
-KEEP = {"vinay199129/ghcp-usage-metrics"}
+KEEP = {"vinay-p-singh/ghcp-usage-metrics"}
 
 ORGS = ["contoso", "northwind", "fabrikam"]
 LEAVES = [
