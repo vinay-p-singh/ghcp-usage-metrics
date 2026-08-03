@@ -69,11 +69,12 @@ class TestSynthetic:
 
     def test_vscode_totals_exact(self, projects):
         vs = projects["acme/alpha"]["vscode"]
-        assert _sum(vs["by_day"], "requests") == 5   # 2 (s1) + 1 (s2) + 1 (child) + 1 (s3)
-        assert _sum(vs["by_day"], "in") == 860        # 300 + 50 + 500 + 10
-        assert _sum(vs["by_day"], "out") == 172       # 60 + 10 + 100 + 2
-        assert round(_sum(vs["by_day"], "aiu"), 4) == 11.5  # 8 + 1 + 2 + 0.5
-        assert _sum(vs["by_day"], "sessions") == 3
+        # 2 (s1) + 1 (s2) + 1 (child) + 1 (s3) + 1 (s4, metadata-only counts)
+        assert _sum(vs["by_day"], "requests") == 6
+        assert _sum(vs["by_day"], "in") == 1560     # 300 + 50 + 500 + 10 + 700
+        assert _sum(vs["by_day"], "out") == 212      # 60 + 10 + 100 + 2 + 40
+        assert round(_sum(vs["by_day"], "aiu"), 4) == 13.0  # 8 + 1 + 2 + 0.5 + 1.5
+        assert _sum(vs["by_day"], "sessions") == 4
         assert set(vs["by_day"]) == {DAY0, DAY1, DAY2}
 
     def test_dedup_chatsession_not_double_counted(self, projects):
@@ -87,7 +88,7 @@ class TestSynthetic:
         assert vs["by_agent"]["Researcher"]["requests"] == 1
         assert round(vs["by_agent"]["Researcher"]["aiu"], 4) == 2.0
         # base agent got everything except the child
-        assert vs["by_agent"]["GitHub Copilot Chat"]["requests"] == 4
+        assert vs["by_agent"]["GitHub Copilot Chat"]["requests"] == 5
 
     def test_skill_attribution(self, projects):
         vs = projects["acme/alpha"]["vscode"]
@@ -103,15 +104,25 @@ class TestSynthetic:
 
     def test_session_activity_preserves_session_date_model_membership(self, projects):
         vs = projects["acme/alpha"]["vscode"]
-        facts = {tuple(key.split(usage._AM_SEP)): count
-                 for key, count in vs["by_sdm"].items()}
-        assert facts == {
-            ("s1", DAY1, "gpt-x"): 1,
-            ("s2", DAY1, "gpt-x"): 1,
-            ("s2", DAY2, "claude"): 1,
-            ("s3", DAY0, "gpt-x"): 1,
+        facts = {tuple(key.split(usage._AM_SEP)): b
+                 for key, b in vs["by_sdm"].items()}
+        assert set(facts) == {
+            ("s1", DAY1, "gpt-x"),
+            ("s2", DAY1, "gpt-x"),
+            ("s2", DAY2, "claude"),
+            ("s3", DAY0, "gpt-x"),
+            ("s4", DAY0, "gpt-x"),
         }
-        assert len({session for session, _, _ in facts}) == 3
+        assert len({session for session, _, _ in facts}) == 4
+        # s1's two day-1 events: 100+200 in, 20+40 out, 5+3 credits. Only the
+        # second reported a cache figure, so cached_req is 1 of 2 requests.
+        assert facts[("s1", DAY1, "gpt-x")] == {
+            "requests": 2, "in": 300, "out": 60, "aiu": 8.0,
+            "cached": 150, "cached_req": 1}
+        # s2's subagent child log is the session's own day-2 activity.
+        assert facts[("s2", DAY2, "claude")] == {
+            "requests": 1, "in": 500, "out": 100, "aiu": 2.0,
+            "cached": 0, "cached_req": 0}
 
     def test_cli_totals(self, projects):
         cli = projects["acme/beta"]["cli"]

@@ -4,6 +4,54 @@ Releases are recorded here from 1.0.0 onward. The development that led up to it
 is summarised at the end, as phases rather than versions — those builds never
 shipped to anyone, and listing them as releases would overstate what happened.
 
+## [1.1.0] — 2026-08-03
+
+Answers a question the previous release could not: what did one piece of work
+cost, and how much of that was the conversation being re-read.
+
+Added
+
+- **Sessions view.** One row per conversation, folded across the days and models
+  it spanned, ranked by credits. Every column sorts. Sessions the store still
+  holds carry the label it recorded; older ones show their id rather than an
+  invented name.
+- **Cache breakdown.** Input tokens split into what was served from the model's
+  prompt cache and what was fresh. On the machine this was built with, 93% of
+  all input was cache — the figure was in the logs all along and was being
+  discarded.
+- **Credit coverage floor.** Credit reporting did not arrive in every harness at
+  once, so the view now opens at the start of the month in which the last one
+  began, rather than averaging complete months together with months that
+  recorded requests and no credits. The date is measured from your own logs, not
+  hardcoded, and the earlier data is still there — a banner explains it and one
+  click widens the range.
+- **Thin-day markers.** Days inside the range that recorded no credits, or where
+  a material share of requests carry no token payload, are marked and explain
+  themselves on hover instead of being quietly averaged in.
+- Per-session and per-day cache figures in the extract, and session names where
+  the session stores still hold them.
+
+Fixed
+
+- Retained chat sessions that recorded their token counts under `result.metadata`
+  rather than on the request itself were being read as zero. Found by comparing
+  against an official usage report; no internal check could see it.
+- `by_sdm` merged inside another dimension's loop and would have been dropped had
+  that dimension been empty.
+- The skill's `query.py` reported lifetime model totals under `--since` /
+  `--until`. Model breakdowns are now date-scoped; agent breakdowns still are not,
+  because no date-by-agent dimension exists, and they now say so.
+
+Notes
+
+- Nothing about scanning changed. `ghcpUsage.quickScanDays` (default 10) still
+  only affects the first paint; a full scan always follows and no log is
+  permanently skipped. The coverage floor changes which dates the view opens on,
+  not which are read.
+- "Cached" does not mean the same thing in every harness: VS Code publishes one
+  combined figure for cache reads, the CLI publishes reads and writes separately
+  and both are counted. See DOMAIN.md.
+
 ## [1.0.0] — 2026-07-30
 
 First release.

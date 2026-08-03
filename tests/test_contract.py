@@ -29,16 +29,20 @@ UPDATING = os.environ.get("UPDATE_GOLDEN") == "1"
 HARNESSES = ["vscode", "cli", "claude"]
 PROJECT_KEYS = ["name"] + HARNESSES
 DIMENSIONS = ["by_day", "by_model", "by_agent", "by_am", "by_dm", "by_sdm",
-              "by_skill", "by_tool", "by_lang"]
-DAY_FIELDS = ["sessions", "requests", "in", "out", "aiu"]
-FLAT_FIELDS = ["requests", "in", "out", "aiu"]
+              "by_skill", "by_tool", "by_lang", "session_names"]
+DAY_FIELDS = ["sessions", "requests", "in", "out", "aiu", "cached", "cached_req"]
+FLAT_FIELDS = ["requests", "in", "out", "aiu", "cached", "cached_req"]
 SKILL_FIELDS = ["reads", "sessions", "requests", "in", "out", "aiu"]
 
 # Dimensions whose key is two values joined by AM_SEP, and what those two are.
 COMPOSITE = {"by_am": ["agent", "model"], "by_dm": ["date", "model"],
              "by_sdm": ["session", "date", "model"]}
 # Dimensions that carry a plain count rather than a bucket of measures.
-COUNTED = ["by_sdm", "by_tool", "by_lang"]
+COUNTED = ["by_tool", "by_lang"]
+# Dimensions whose values are a bucket of the flat measures.
+FLAT_DIMENSIONS = ["by_model", "by_agent", "by_am", "by_dm", "by_sdm"]
+# Dimensions whose values are a plain string.
+NAMED = ["session_names"]
 
 
 @pytest.fixture(scope="module")
@@ -66,7 +70,7 @@ def test_measures_are_named_the_same_wherever_they_appear(projects):
             rec = p[h]
             for b in rec["by_day"].values():
                 assert sorted(b) == sorted(DAY_FIELDS)
-            for dim in ("by_model", "by_agent", "by_am", "by_dm"):
+            for dim in FLAT_DIMENSIONS:
                 for b in rec[dim].values():
                     assert sorted(b) == sorted(FLAT_FIELDS), dim
             for b in rec["by_skill"].values():
@@ -74,6 +78,9 @@ def test_measures_are_named_the_same_wherever_they_appear(projects):
             for dim in COUNTED:
                 for c in rec[dim].values():
                     assert isinstance(c, int), dim
+            for dim in NAMED:
+                for v in rec[dim].values():
+                    assert isinstance(v, str) and v, dim
 
 
 def test_only_the_composite_dimensions_use_the_separator(projects):
@@ -89,11 +96,12 @@ def test_only_the_composite_dimensions_use_the_separator(projects):
 
 
 def test_sessions_are_recorded_only_where_they_can_be_attributed(projects):
-    # Session activity is a set of facts, not an additive measure. A mixed-model
-    # session appears in several by_sdm facts but is counted distinctly by its ID.
+    # A session spans models and days, so no breakdown may carry a session count:
+    # sessions are counted by distinct id, never summed. `by_sdm` now carries
+    # magnitudes, but its key set is still what makes a session distinct.
     for p in projects:
         for h in HARNESSES:
-            for dim in ("by_model", "by_agent", "by_am", "by_dm"):
+            for dim in FLAT_DIMENSIONS:
                 for b in p[h][dim].values():
                     assert "sessions" not in b, dim
 
@@ -107,6 +115,8 @@ def test_the_contract_is_recorded_for_the_javascript_side(projects):
         "flat_fields": FLAT_FIELDS,
         "skill_fields": SKILL_FIELDS,
         "counted_dimensions": COUNTED,
+        "flat_dimensions": FLAT_DIMENSIONS,
+        "named_dimensions": NAMED,
         "composite_dimensions": COMPOSITE,
         "separator": AM_SEP,
         "sentinels": {"no_token_model": NO_TOKEN,

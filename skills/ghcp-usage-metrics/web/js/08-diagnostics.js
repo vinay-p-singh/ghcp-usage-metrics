@@ -4,6 +4,7 @@
 // This panel reports each one, so a surprising number can be traced to a cause.
 const diagPills = document.getElementById("diagPills");
 const diagCoverage = document.getElementById("diagCoverage");
+const diagFloor = document.getElementById("diagFloor");
 const diagSources = document.getElementById("diagSources");
 const diagErrors = document.getElementById("diagErrors");
 const diagBadge = document.getElementById("diagBadge");
@@ -12,6 +13,44 @@ const CLIENT_NAME = { vscode: "VS Code", cli: "Copilot CLI", claude: "Claude Cod
 function diagPill(k, v, sub, cls) {
   return `<div class="pill"><div class="k">${esc(k)}</div>` +
     `<div class="v ${cls || ""}">${v}</div><div class="s">${esc(sub || "")}</div></div>`;
+}
+
+// Credit telemetry arrived at different times per harness, so a total spanning
+// the changeover mixes complete months with months that recorded requests only.
+// Saying exactly when each one started is the difference between a reader
+// trusting a low early figure and understanding it.
+function renderCreditCoverage(cf) {
+  if (!diagFloor) return;
+  if (!cf.floor) {
+    diagFloor.innerHTML =
+      '<p class="diag-reason">No AI credits were recorded by any harness in this ' +
+      'scan, so there is no coverage floor to report. Requests and tokens shown ' +
+      'elsewhere are still real.</p>';
+    return;
+  }
+  const onsetRows = Object.keys(cf.onsets || {}).map(k =>
+    `<tr><td>${esc(CLIENT_NAME[k] || k)}</td><td>${esc(cf.onsets[k])}</td>` +
+    `<td>reports credits</td></tr>`).join("");
+  const neverRows = (cf.never_reports || []).map(k =>
+    `<tr><td>${esc(CLIENT_NAME[k] || k)}</td><td>&mdash;</td>` +
+    `<td>publishes no credit figure at all</td></tr>`).join("");
+  const days = cf.days_before || 0;
+  diagFloor.innerHTML =
+    `<p class="diag-reason"><b>Credits are complete from ${esc(cf.floor)}.</b> ` +
+    `That is the date the last harness began reporting them. The view opens at ` +
+    `the start of that month, so a headline never averages complete months ` +
+    `against incomplete ones, and thin days inside the range are marked rather ` +
+    `than removed.</p>` +
+    `<table class="ptable"><thead><tr><th>Harness</th><th>Credits from</th>` +
+    `<th>Status</th></tr></thead><tbody>${onsetRows}${neverRows}</tbody></table>` +
+    `<p class="diag-reason">${days} earlier active day${days === 1 ? "" : "s"}` +
+    (cf.first_day ? ` (back to ${esc(cf.first_day)})` : "") +
+    ` recorded requests and tokens but no credits. That data is kept, not deleted ` +
+    `&mdash; widen the date range to include it, and read its credit column as ` +
+    `&ldquo;not reported&rdquo; rather than zero spend.</p>` +
+    `<p class="diag-reason">The most recent days can also under-report: the CLI ` +
+    `writes its billing rows when a session closes, so today&rsquo;s figures may ` +
+    `still be filling in.</p>`;
 }
 
 function renderDiagnostics() {
@@ -71,6 +110,8 @@ function renderDiagnostics() {
       `<th class="num">Requests</th><th class="num">No token data</th></tr></thead>` +
       `<tbody>${projRowsHtml}</tbody></table></div>`;
   }
+
+  renderCreditCoverage(d.credit_floor || {});
 
   // sources
   const srcRows = Object.keys(srcs).map(k => {

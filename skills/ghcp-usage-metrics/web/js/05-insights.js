@@ -1,3 +1,94 @@
+// ---- sessions --------------------------------------------------------------
+// The extractor records each session's own tokens and credits; without this the
+// question it was gathered to answer -- "what did that piece of work cost" --
+// had nowhere to appear.
+const sessionBody = document.getElementById("sessionBody");
+const sessReveal = document.getElementById("sessReveal");
+const cacheSplitEl = document.getElementById("cacheSplit");
+// A session that recorded requests but no tokens cost nothing measurable, so it
+// is noise in a ranking by cost. Hidden rather than dropped: the count stays
+// visible and one click brings them back.
+let sessShowQuiet = false;
+// Sorting state lives here rather than being read back from the header, which
+// this function rewrites on every render.
+let sessSort = { key: "aiu", dir: "desc" };
+
+function sessSortBy(key) {
+  // A new column starts on the reading most people want: biggest first for a
+  // measure, A-Z for a label.
+  const numeric = key !== "name" && key !== "project" && key !== "when";
+  sessSort = sessSort.key === key
+    ? { key, dir: sessSort.dir === "asc" ? "desc" : "asc" }
+    : { key, dir: numeric ? "desc" : "asc" };
+}
+
+function markSortedHeader() {
+  for (const th of document.querySelectorAll('[data-tabpanel="sessions"] th.sortable')) {
+    const on = th.dataset.sort === sessSort.key;
+    th.setAttribute("aria-sort", on ? (sessSort.dir === "asc" ? "ascending" : "descending") : "none");
+    th.dataset.dir = on ? sessSort.dir : "";
+  }
+}
+
+function renderSessions(all) {
+  if (!sessionBody) return;
+  const quiet = all.filter(r => !r.in && !r.aiu);
+  const kept = sessShowQuiet ? all : all.filter(r => r.in || r.aiu);
+  const rows = sortSessions(kept, sessSort.key, sessSort.dir);
+  markSortedHeader();
+  if (sessReveal) {
+    sessReveal.hidden = quiet.length === 0;
+    sessReveal.textContent = sessShowQuiet
+      ? `hide ${fmt(quiet.length)} with no recorded tokens`
+      : `show ${fmt(quiet.length)} with no recorded tokens`;
+  }
+  if (!rows.length) {
+    sessionBody.innerHTML = '<tr><td colspan="9" class="muted">No sessions in range.</td></tr>';
+    return;
+  }
+  sessionBody.innerHTML = rows.slice(0, 200).map(r => {
+    const when = r.first === r.last ? r.first : `${r.first} \u2013 ${r.last}`;
+    const label = r.name || r.sid.slice(0, 8);
+    const title = r.name ? `${r.name}\n${r.sid}`
+      : `${r.sid}\nOlder than the session store keeps, so no name survived.`;
+    return `<tr><td class="dn" title="${esc(title)}">${esc(label)}` +
+      (r.name ? "" : ' <span class="muted">(unnamed)</span>') + "</td>" +
+      `<td class="dn" title="${esc(r.project)}">${esc(r.project)}</td>` +
+      `<td>${esc(when)}</td>` +
+      `<td class="num">${fmt(r.requests)}</td>` +
+      `<td class="num">${fmtAiu(r.aiu)}</td>` +
+      `<td class="num">${r.requests ? fmtAiu(r.aiu / r.requests) : "\u2014"}</td>` +
+      `<td class="num">${fmtK(r.in)}</td>` +
+      `<td class="num">${r.cached ? fmtK(r.cached) : "\u2014"}</td>` +
+      `<td class="num">${fmtK(r.out)}</td></tr>`;
+  }).join("");
+}
+
+function renderCacheSplit(totals) {
+  if (!cacheSplitEl) return;
+  if (!totals.in) {
+    cacheSplitEl.innerHTML = '<div class="muted">No input tokens in range.</div>';
+    return;
+  }
+  const s = cacheSplit(totals);
+  const pct = Math.round(s.share * 1000) / 10;
+  cacheSplitEl.innerHTML =
+    '<div class="stack">' +
+    `<div class="seg" style="width:${pct}%;background:${PALETTE[0]}"></div>` +
+    `<div class="seg" style="width:${100 - pct}%;background:${PALETTE[1]}"></div></div>` +
+    '<div class="legend">' +
+    `<span class="lg"><i style="background:${PALETTE[0]}"></i>From cache ${fmtK(s.cached)} (${pct}%)</span>` +
+    `<span class="lg"><i style="background:${PALETTE[1]}"></i>Fresh ${fmtK(s.miss)} (${Math.round((100 - pct) * 10) / 10}%)</span>` +
+    "</div>" +
+    (s.coverage >= 0.95
+      ? `<p class="diag-reason">${s.complete ? "Every request" : Math.round(s.coverage * 100) + "% of requests"} ` +
+        "in range reported a cache figure.</p>"
+      : `<p class="diag-reason">\u26a0 Only ${Math.round(s.coverage * 100)}% of requests in ` +
+        "range reported a cache figure &mdash; cache reporting began part-way through " +
+        "the recorded history. The rest are counted in the input total but not in the " +
+        "cache split, so the cached share here is a floor.</p>");
+}
+
 // ---- agent cost ranking (FR-006) + cost-reduction signals (FR-010) ----
 // Ranks named agents/subagents by total attributed AIU (most expensive first) so the
 // biggest spenders can be targeted for reduction. AIU/request exposes per-call cost.

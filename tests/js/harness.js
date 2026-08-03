@@ -36,7 +36,8 @@ function template() {
 }
 
 function bucket(o) {
-  return Object.assign({ sessions: 0, requests: 0, in: 0, out: 0, aiu: 0 }, o || {});
+  return Object.assign({ sessions: 0, requests: 0, in: 0, out: 0, aiu: 0,
+                         cached: 0, cached_req: 0 }, o || {});
 }
 
 /** One client's metrics, shaped exactly as usage.py emits them. */
@@ -45,7 +46,7 @@ function client(days, extra) {
   for (const d in (days || {})) by_day[d] = bucket(days[d]);
   return Object.assign({
     by_day, by_model: {}, by_agent: {}, by_am: {}, by_dm: {}, by_sdm: {},
-    by_skill: {}, by_tool: {}, by_lang: {}
+    by_skill: {}, by_tool: {}, by_lang: {}, session_names: {}
   }, extra || {});
 }
 
@@ -60,7 +61,8 @@ function project(name, parts) {
   };
 }
 
-const FLAT = (o) => Object.assign({ requests: 0, in: 0, out: 0, aiu: 0 }, o);
+const FLAT = (o) => Object.assign({ requests: 0, in: 0, out: 0, aiu: 0,
+                                    cached: 0, cached_req: 0 }, o);
 
 /** Two projects across two days -- enough for filters, charts and tables. */
 function sampleData() {
@@ -73,8 +75,8 @@ function sampleData() {
           by_agent: { "GitHub Copilot Chat": FLAT({ requests: 15, in: 1500, out: 150, aiu: 75 }) },
           by_dm: { "2026-07-01\u001fgpt-x": FLAT({ requests: 10, in: 1000, out: 100, aiu: 50 }),
                    "2026-07-02\u001fgpt-x": FLAT({ requests: 5, in: 500, out: 50, aiu: 25 }) },
-          by_sdm: { "vs1\u001f2026-07-01\u001fgpt-x": 1,
-                    "vs2\u001f2026-07-02\u001fgpt-x": 1 },
+          by_sdm: { "vs1\u001f2026-07-01\u001fgpt-x": FLAT({ requests: 10, in: 1000, out: 100, aiu: 50 }),
+                    "vs2\u001f2026-07-02\u001fgpt-x": FLAT({ requests: 5, in: 500, out: 50, aiu: 25 }) },
           by_am: { "GitHub Copilot Chat\u001fgpt-x": FLAT({ requests: 15, in: 1500, out: 150, aiu: 75 }) } })
     }),
     project("acme/beta", {
@@ -83,8 +85,8 @@ function sampleData() {
         { by_model: { "gpt-cli": FLAT({ requests: 4, in: 400, out: 40, aiu: 20 }) },
           by_agent: { "Copilot CLI": FLAT({ requests: 4, in: 400, out: 40, aiu: 20 }) },
           by_dm: { "2026-07-02\u001fgpt-cli": FLAT({ requests: 4, in: 400, out: 40, aiu: 20 }) },
-          by_sdm: { "cli1\u001f2026-07-02\u001fgpt-cli": 1,
-                    "cli2\u001f2026-07-02\u001fgpt-cli": 1 },
+          by_sdm: { "cli1\u001f2026-07-02\u001fgpt-cli": FLAT({ requests: 2, in: 200, out: 20, aiu: 10 }),
+                    "cli2\u001f2026-07-02\u001fgpt-cli": FLAT({ requests: 2, in: 200, out: 20, aiu: 10 }) },
           by_am: { "Copilot CLI\u001fgpt-cli": FLAT({ requests: 4, in: 400, out: 40, aiu: 20 }) } })
     })
   ];
@@ -102,6 +104,8 @@ function sampleDiag() {
                 by_client: { vscode: { requests: 15, no_tokens: 0 },
                              cli: { requests: 4, no_tokens: 0 },
                              claude: { requests: 0, no_tokens: 0 } } },
+    credit_floor: { floor: null, onsets: {}, never_reports: [],
+                    first_day: "2026-07-01", days_before: 0 },
     no_token_rows: []
   };
 }

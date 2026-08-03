@@ -94,3 +94,105 @@ test("the verdict is lifetime, so narrowing the dates cannot reshuffle the sideb
   // take, since there is no window for a caller to accidentally pass.
   assert.equal(lib.hasRecordedUsage.length, 1);
 });
+
+// ---- credit-coverage floor -------------------------------------------------
+// Credit telemetry started at different times per harness. Opening on the full
+// span silently averages complete months together with months that recorded
+// requests and no credits, which reads as "my spend fell" when nothing of the
+// sort happened.
+
+test("the view opens at the floor's month when earlier data predates credit reporting", () => {
+  const diag = { credit_floor: { floor: "2026-07-09" } };
+  assert.equal(lib.creditFloorStart(diag, "2026-01-08", "", true), "2026-07-01");
+});
+
+test("an explicit configured start always wins over the floor", () => {
+  const diag = { credit_floor: { floor: "2026-07-09" } };
+  assert.equal(lib.creditFloorStart(diag, "2026-01-08", "2026-02-01", true),
+               "2026-02-01");
+});
+
+test("turning the floor off opens on everything recorded", () => {
+  const diag = { credit_floor: { floor: "2026-07-09" } };
+  assert.equal(lib.creditFloorStart(diag, "2026-01-08", "", false), "2026-01-08");
+});
+
+test("a floor earlier than the data never pushes the start backwards", () => {
+  const diag = { credit_floor: { floor: "2026-01-01" } };
+  assert.equal(lib.creditFloorStart(diag, "2026-05-01", "", true), "2026-05-01");
+});
+
+test("no floor at all leaves the start alone rather than guessing one", () => {
+  assert.equal(lib.creditFloorStart({}, "2026-05-01", "", true), "2026-05-01");
+  assert.equal(lib.creditFloorStart(null, "2026-05-01", "", true), "2026-05-01");
+});
+
+// ---- where the view opens --------------------------------------------------
+// Credit reporting switched on part-way through a month, so the computed floor
+// lands mid-month. Opening there would show half a month with no explanation.
+// Open on the whole month instead and flag the thin days inside it.
+
+test("the start rounds back to the beginning of the month the floor falls in", () => {
+  // Credit reporting switched on mid-month. Opening on the 9th would cut the
+  // month in half for no reason a reader could see; opening on the 1st gives a
+  // whole month, and the days inside it that are thin get flagged instead.
+  const diag = { credit_floor: { floor: "2026-07-09" } };
+  assert.equal(lib.creditFloorStart(diag, "2026-01-08", "", true), "2026-07-01");
+});
+
+test("rounding back never reaches past the earliest data we hold", () => {
+  const diag = { credit_floor: { floor: "2026-07-09" } };
+  assert.equal(lib.creditFloorStart(diag, "2026-07-05", "", true), "2026-07-05");
+});
+
+test("a floor already on the first of a month is left alone", () => {
+  const diag = { credit_floor: { floor: "2026-07-01" } };
+  assert.equal(lib.creditFloorStart(diag, "2026-01-08", "", true), "2026-07-01");
+});
+
+// ---- flagging thin days ----------------------------------------------------
+// Inside the opened range some days are still incomplete. They stay visible and
+// get a marker, because removing them would be the same hiding the floor was
+// meant to avoid.
+
+test("a day with requests but no credits at all is flagged", () => {
+  const w = lib.dayWarning({ requests: 40, aiu: 0, noToken: 0 });
+  assert.ok(w, "a whole day of uncredited requests is the clearest warning sign");
+  assert.match(w, /credit/i);
+});
+
+test("a day where some requests carry no token payload is flagged", () => {
+  const w = lib.dayWarning({ requests: 100, aiu: 500, noToken: 12 });
+  assert.match(w, /12 of 100/);
+});
+
+test("a fully recorded day is not flagged", () => {
+  assert.equal(lib.dayWarning({ requests: 100, aiu: 500, noToken: 0 }), null);
+});
+
+test("a day with no requests is not flagged as a problem", () => {
+  assert.equal(lib.dayWarning({ requests: 0, aiu: 0, noToken: 0 }), null);
+});
+
+test("credits missing outranks a partial token payload in the message", () => {
+  const w = lib.dayWarning({ requests: 40, aiu: 0, noToken: 40 });
+  assert.match(w, /credit/i, "the bigger problem is the one worth naming first");
+});
+
+test("a trivial share of token-less requests is not worth a warning", () => {
+  // A marker that fires on almost every day is wallpaper. Measured on real
+  // data: without a threshold this lit up 21 of 27 days, most of them a single
+  // request in several hundred.
+  assert.equal(lib.dayWarning({ requests: 345, aiu: 6723, noToken: 1 }), null);
+  assert.equal(lib.dayWarning({ requests: 100, aiu: 500, noToken: 4 }), null);
+});
+
+test("a material share of token-less requests is flagged", () => {
+  assert.ok(lib.dayWarning({ requests: 100, aiu: 500, noToken: 6 }));
+  assert.ok(lib.dayWarning({ requests: 223, aiu: 3942, noToken: 44 }));
+});
+
+test("missing credits are flagged however small the day", () => {
+  assert.ok(lib.dayWarning({ requests: 9, aiu: 0, noToken: 0 }),
+            "a day with no credits at all is always worth saying");
+});

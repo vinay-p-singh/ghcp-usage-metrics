@@ -27,7 +27,7 @@ from ghcp.billing import (apply_billing, billing_or_defer, load_cache, prewarm,
 from ghcp.constants import AGENT_DEFAULT, AM_SEP, NO_TOKEN, RUNSUBAGENT_PREFIX
 from ghcp.diagnostics import diag_err, src
 from ghcp.jsonl import _langs_from_response, _reconstruct_jsonl
-from ghcp.model import _add_day, _add_flat, _metrics
+from ghcp.model import _add_day, _add_flat, _metrics, name_session
 from ghcp.naming import project_name, repo_slug, uri_to_path
 from ghcp.normalize import (_any_date, _date_of_path, _norm_agent, _norm_model,
                             _utc_date_ms)
@@ -68,6 +68,28 @@ def sid_agent_map(db: str) -> dict[str, str]:
         if "agent_name" in cols:
             for sid, agent in conn.execute("SELECT id, agent_name FROM sessions"):
                 out[sid] = _norm_agent(agent)
+        conn.close()
+    except Exception:
+        pass
+    return out
+
+
+def sid_summary_map(db: str) -> dict[str, str]:
+    """session id -> the short summary VS Code stored for it.
+
+    Only sessions the store still retains have one; the rest were purged, so a
+    session with no entry here is shown by its id rather than given a name.
+    """
+    out: dict[str, str] = {}
+    if not os.path.isfile(db):
+        return out
+    try:
+        conn = _connect_ro(db)
+        cols = [c[1] for c in conn.execute("PRAGMA table_info(sessions)")]
+        if "summary" in cols:
+            for sid, summary in conn.execute("SELECT id, summary FROM sessions"):
+                if summary and str(summary).strip():
+                    out[sid] = str(summary).strip()
         conn.close()
     except Exception:
         pass
@@ -126,7 +148,7 @@ def _attribute_skills(m: dict, skills: dict | None, totals: tuple) -> None:
 
 def scan_chat_file(cf: str, out: dict, sid_repo: dict, sid_agent: dict,
                    sid_skills: dict, seen_sids: set, fallback: str,
-                   hash_dbg: set) -> bool:
+                   hash_dbg: set, sid_summary: dict | None = None) -> bool:
     """Add a chatSessions file's real requests to ``out`` when the session is NOT
     already covered by a (richer) debug-log. ``copilotCredits`` == AIU. These
     retained sessions reach further back than the rotated debug-logs and carry
@@ -152,6 +174,7 @@ def scan_chat_file(cf: str, out: dict, sid_repo: dict, sid_agent: dict,
     name = sid_repo.get(sid, fallback)
     agent = sid_agent.get(sid, AGENT_DEFAULT)
     m = out[name]
+    name_session(m, sid, (sid_summary or {}).get(sid))
     dates = []
     s_req = s_in = s_out = 0
     s_aiu = 0.0
@@ -163,16 +186,20 @@ def scan_chat_file(cf: str, out: dict, sid_repo: dict, sid_agent: dict,
             continue
         date = _utc_date_ms(ts)
         dates.append(date)
-        it = r.get("promptTokens") or 0
-        ot = r.get("completionTokens") or 0
-        cc = r.get("copilotCredits") or 0.0
+        # Some retained sessions record the counts on the request, others only
+        # under result.metadata. Both are the source's own figures.
+        md = (r.get("result") or {}).get("metadata") or {}
+        it = r.get("promptTokens") or md.get("promptTokens") or 0
+        ot = r.get("completionTokens") or md.get("completionTokens") or 0
+        cc = r.get("copilotCredits") or md.get("copilotCredits") or 0.0
         model = _norm_model(r.get("modelId"))
         _add_day(m, date, requests=1, in_=it, out=ot, aiu=cc)
         _add_flat(m["by_model"], model, requests=1, in_=it, out=ot, aiu=cc)
         _add_flat(m["by_agent"], agent, requests=1, in_=it, out=ot, aiu=cc)
         _add_flat(m["by_am"], agent + AM_SEP + model, requests=1, in_=it, out=ot, aiu=cc)
         _add_flat(m["by_dm"], date + AM_SEP + model, requests=1, in_=it, out=ot, aiu=cc)
-        m["by_sdm"][sid + AM_SEP + date + AM_SEP + model] = 1
+        _add_flat(m["by_sdm"], sid + AM_SEP + date + AM_SEP + model,
+                  requests=1, in_=it, out=ot, aiu=cc)
         s_req += 1
         s_in += it
         s_out += ot
@@ -201,7 +228,8 @@ def scan_chat_file(cf: str, out: dict, sid_repo: dict, sid_agent: dict,
             _add_flat(m["by_agent"], agent, requests=1)
             _add_flat(m["by_am"], agent + AM_SEP + NO_TOKEN, requests=1)
             _add_flat(m["by_dm"], d + AM_SEP + NO_TOKEN, requests=1)
-            m["by_sdm"][sid + AM_SEP + d + AM_SEP + NO_TOKEN] = 1
+            _add_flat(m["by_sdm"], sid + AM_SEP + d + AM_SEP + NO_TOKEN,
+                      requests=1)
             seen.add(d)
     if seen:
         _add_day(m, min(seen), sessions=1)
@@ -219,8 +247,10 @@ def _scan_session_dir(entry, m: dict, agent: str, cache: dict) -> tuple[dict, tu
     rec = billing_or_defer(mj, cache) if os.path.isfile(mj) else {}
     childrefs = rec.get("childrefs", {})
     s_req, s_in, s_out, s_aiu = apply_billing(m, agent, rec)
-    for key in rec.get("by_dm", {}):
-        m["by_sdm"][entry.name + AM_SEP + key] = 1
+    for key, b in rec.get("by_dm", {}).items():
+        _add_flat(m["by_sdm"], entry.name + AM_SEP + key, requests=b["requests"],
+                  in_=b["in"], out=b["out"], aiu=b["aiu"],
+                  cached=b.get("cached", 0), cached_req=b.get("cached_req", 0))
     # Child logs: runSubagent-<name>-<sid>.jsonl carry a named subagent's OWN
     # tokens; title/summarize logs fold into the session's agent.
     for cf in os.scandir(entry.path):
@@ -233,8 +263,11 @@ def _scan_session_dir(entry, m: dict, agent: str, cache: dict) -> tuple[dict, tu
             sub = agent
         child = billing_or_defer(cf.path, cache)
         c_req, c_in, c_out, c_aiu = apply_billing(m, sub, child)
-        for key in child.get("by_dm", {}):
-            m["by_sdm"][entry.name + AM_SEP + key] = 1
+        for key, b in child.get("by_dm", {}).items():
+            _add_flat(m["by_sdm"], entry.name + AM_SEP + key,
+                      requests=b["requests"], in_=b["in"], out=b["out"],
+                      aiu=b["aiu"], cached=b.get("cached", 0),
+                      cached_req=b.get("cached_req", 0))
         s_req += c_req
         s_in += c_in
         s_out += c_out
@@ -246,6 +279,7 @@ def _scan_workspace(vs_root: str, h: str, fallback: str, out: dict, cache: dict,
                     maps: dict, seen_sids: set) -> None:
     """Scan one workspace hash: its debug-logs, then its retained chatSessions."""
     sid_repo, sid_agent, sid_skills = maps["repo"], maps["agent"], maps["skills"]
+    sid_summary = maps.get("summary", {})
     hash_dbg: set[str] = set()
     dbg = os.path.join(vs_root, h, "GitHub.copilot-chat", "debug-logs")
     if os.path.isdir(dbg):
@@ -256,6 +290,7 @@ def _scan_workspace(vs_root: str, h: str, fallback: str, out: dict, cache: dict,
             seen_sids.add(e.name)
             m = out[sid_repo.get(e.name, fallback)]
             agent = sid_agent.get(e.name, AGENT_DEFAULT)
+            name_session(m, e.name, sid_summary.get(e.name))
             rec, totals = _scan_session_dir(e, m, agent, cache)
             _attribute_skills(m, sid_skills.get(e.name), totals)
             main_by_day = rec.get("by_day", {})
@@ -276,7 +311,7 @@ def _scan_workspace(vs_root: str, h: str, fallback: str, out: dict, cache: dict,
             cs["files_deferred"] += 1
             continue
         if scan_chat_file(cf, out, sid_repo, sid_agent, sid_skills,
-                          seen_sids, fallback, hash_dbg):
+                          seen_sids, fallback, hash_dbg, sid_summary):
             cs["files_parsed"] += 1
 
 
@@ -285,7 +320,8 @@ def scan_vscode_root(vs_root: str, vs_db: str, out: dict, cache: dict,
     """Scan one VS Code variant's workspaceStorage into ``out``."""
     maps = {"repo": sid_repo_map(vs_db),
             "agent": sid_agent_map(vs_db),
-            "skills": sid_skills_map(vs_db)}
+            "skills": sid_skills_map(vs_db),
+            "summary": sid_summary_map(vs_db)}
     for wj in glob.glob(os.path.join(vs_root, "*", "workspace.json")):
         h = os.path.basename(os.path.dirname(wj))
         src("vscode_ws")["files_found"] += 1

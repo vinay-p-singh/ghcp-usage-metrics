@@ -15,6 +15,7 @@ import sys
 CLIENTS = ("vscode", "cli", "claude")
 HARNESS_LABEL = {"vscode": "VS Code", "cli": "Copilot CLI", "claude": "Claude Code"}
 NO_TOKEN = "(no token data)"
+AM_SEP = "\x1f"
 
 
 def find_repo() -> str | None:
@@ -79,12 +80,34 @@ def day_totals(rows: list[dict], args: argparse.Namespace,
 
 
 def acc_dim(rows: list[dict], dim: str, fields: tuple[str, ...]) -> dict:
-    """Aggregate a lifetime dimension (by_model / by_agent / by_skill)."""
+    """Aggregate a lifetime dimension (by_agent / by_skill)."""
     out: dict[str, dict] = {}
     for p in rows:
         for c in CLIENTS:
             for key, b in p[c].get(dim, {}).items():
                 t = out.setdefault(key, dict.fromkeys(fields, 0))
+                for f in fields:
+                    t[f] += b.get(f, 0)
+    return out
+
+
+def model_totals(rows: list[dict], args: argparse.Namespace,
+                 fields: tuple[str, ...] = ("requests", "in", "out", "aiu")) -> dict:
+    """Per-model totals for the selected date range, from ``by_dm``.
+
+    The logs record the date and the model on the same event, so this breakdown
+    can honour ``--since``/``--until``. Summed over a window it equals that
+    window's day totals, which is what makes it comparable with an external
+    report for the same dates.
+    """
+    out: dict[str, dict] = {}
+    for p in rows:
+        for c in CLIENTS:
+            for key, b in p[c].get("by_dm", {}).items():
+                date, _, model = key.partition(AM_SEP)
+                if not in_range(date, args):
+                    continue
+                t = out.setdefault(model, dict.fromkeys(fields, 0))
                 for f in fields:
                     t[f] += b.get(f, 0)
     return out
@@ -146,11 +169,12 @@ def cmd_agents(rows: list[dict], args: argparse.Namespace) -> None:
           [[k, fmt(v["requests"]), faiu(v["aiu"]),
             faiu(v["aiu"] / v["requests"]) if v["requests"] else "-",
             fmt(v["in"]), fmt(v["out"])] for k, v in items])
-    print("\nLifetime totals — the date range does not apply to this breakdown.")
+    print("\nLifetime totals — there is no date-by-agent dimension in the extract, "
+          "so the date range does not apply to this breakdown.")
 
 
 def cmd_models(rows: list[dict], args: argparse.Namespace) -> None:
-    agg = acc_dim(rows, "by_model", ("requests", "in", "out", "aiu"))
+    agg = model_totals(rows, args)
     untracked = agg.pop(NO_TOKEN, None)
     items = sorted(agg.items(), key=lambda kv: -kv[1]["aiu"])
     table(["model", "requests", "AIU", "input", "output"],
@@ -158,7 +182,9 @@ def cmd_models(rows: list[dict], args: argparse.Namespace) -> None:
            for k, v in items])
     if untracked:
         print(f"\nPlus {fmt(untracked['requests'])} requests with no recorded model/tokens.")
-    print("Lifetime totals — the date range does not apply to this breakdown.")
+    if args.since or args.until:
+        print(f"Range {args.since or 'start'} .. {args.until or 'now'}; "
+              "these credits sum to the same range's total.")
 
 
 def cmd_skills(rows: list[dict], args: argparse.Namespace) -> None:
@@ -199,13 +225,18 @@ def cmd_project(rows: list[dict], args: argparse.Namespace) -> None:
               f"AIU {faiu(t['aiu'])} | in {fmt(t['in'])} | out {fmt(t['out'])}")
         if days:
             print(f"   active {len(days)} days ({days[0]} .. {days[-1]})")
-        for dim, label in (("by_model", "models"), ("by_agent", "agents")):
-            agg = acc_dim([p], dim, ("requests", "aiu"))
-            agg.pop(NO_TOKEN, None)
-            top = sorted(agg.items(), key=lambda kv: -kv[1]["aiu"])[:6]
-            if top:
-                print(f"   {label}: " + ", ".join(
-                    f"{k} ({faiu(v['aiu'])} AIU)" for k, v in top))
+        models = model_totals([p], args)
+        models.pop(NO_TOKEN, None)
+        top = sorted(models.items(), key=lambda kv: -kv[1]["aiu"])[:6]
+        if top:
+            print("   models: " + ", ".join(
+                f"{k} ({faiu(v['aiu'])} AIU)" for k, v in top))
+        agents = acc_dim([p], "by_agent", ("requests", "aiu"))
+        agents.pop(NO_TOKEN, None)
+        top = sorted(agents.items(), key=lambda kv: -kv[1]["aiu"])[:6]
+        if top:
+            print("   agents (lifetime): " + ", ".join(
+                f"{k} ({faiu(v['aiu'])} AIU)" for k, v in top))
         print()
 
 

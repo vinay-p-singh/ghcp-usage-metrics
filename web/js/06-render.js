@@ -119,6 +119,8 @@ function aggregate(scope) {
     aiu: 0, req: 0, inTok: 0, outTok: 0, projCount: 0,
     reqVs: 0, reqCli: 0, reqCla: 0, sessTot: 0,
     days: new Set(), daily: {}, dailyReq: {}, dayStats: {}, perProj: [],
+    cachedTok: 0, cachedReq: 0, rows: [],
+    clients: [vs ? "vscode" : null, cli ? "cli" : null, cla ? "claude" : null].filter(Boolean),
     modelAgg: {}, agentAgg: {}, amAgg: {}, skillAgg: {}, toolAgg: {}, langAgg: {}
   };
   for (const d of DATA) {
@@ -131,6 +133,7 @@ function aggregate(scope) {
     const inScope = act > 0 && !excluded.has(d.name);
     if (!inScope) continue;
     agg.projCount++;
+    agg.rows.push(d);
     let ps = 0, pr = 0, pi = 0, po = 0, pa = 0;
     for (const [clm, on, hk] of [[d.vscode, vs, "vs"], [d.cli, cli, "cli"], [d.claude, cla, "cla"]]) {
       if (!on) continue;
@@ -142,14 +145,26 @@ function aggregate(scope) {
           const b = clm.by_day[date];
           const t = dm ? (dm[date] || ZERO) : b;
           pr += t.requests; pi += t.in; po += t.out; pa += t.aiu;
+          agg.cachedTok += t.cached || 0;
+          agg.cachedReq += t.cached_req || 0;
           agg.daily[date] = (agg.daily[date] || 0) + t.aiu;
           agg.dailyReq[date] = (agg.dailyReq[date] || 0) + t.requests;
-          const ds = agg.dayStats[date] || (agg.dayStats[date] = { req: 0, in: 0, out: 0, aiu: 0, sessions: 0 });
+          const ds = agg.dayStats[date] || (agg.dayStats[date] = { req: 0, in: 0, out: 0, aiu: 0, sessions: 0, noToken: 0 });
           ds.req += t.requests; ds.in += t.in; ds.out += t.out; ds.aiu += t.aiu;
           ds.sessions += sessionTotals.byDay[date] || 0;
           if (hk === "vs") agg.reqVs += t.requests; else if (hk === "cli") agg.reqCli += t.requests; else agg.reqCla += t.requests;
           if (!dm || t.requests > 0) agg.days.add(date);
         }
+      }
+      // Requests the source filed under no model at all: they raise the request
+      // count and nothing else, which is what makes a day look cheap.
+      for (const key in clm.by_dm) {
+        const i = key.indexOf(DIM_SEP);
+        if (i < 0 || isRecordedModel(key.slice(i + 1))) continue;
+        const date = key.slice(0, i);
+        if (date < from || date > to) continue;
+        const ds = agg.dayStats[date] || (agg.dayStats[date] = { req: 0, in: 0, out: 0, aiu: 0, sessions: 0, noToken: 0 });
+        ds.noToken += clm.by_dm[key].requests;
       }
       // The model list follows the date range now, same as everything else.
       const mw = modelTotalsIn(clm, from, to);
@@ -207,6 +222,22 @@ function render() {
   renderModels(a.modelAgg);
   renderAgents(a.agentAgg, a.amAgg);
   renderSkills(a.skillAgg);
+  renderSessions(rankSessions(a.rows, scope.from, scope.to, MODEL_OFF, a.clients));
+  if (sessReveal && !sessReveal._bound) {
+    sessReveal._bound = true;
+    sessReveal.addEventListener("click", () => { sessShowQuiet = !sessShowQuiet; render(); });
+  }
+  const sessHead = document.querySelector('[data-tabpanel="sessions"] thead');
+  if (sessHead && !sessHead._bound) {
+    sessHead._bound = true;
+    sessHead.addEventListener("click", ev => {
+      const th = ev.target.closest("th.sortable");
+      if (!th) return;
+      sessSortBy(th.dataset.sort);
+      render();
+    });
+  }
+  renderCacheSplit({ in: a.inTok, cached: a.cachedTok, requests: a.req, cached_req: a.cachedReq });
   renderStrengths(a.modelAgg, a.agentAgg, a.toolAgg, a.perProj, { out: a.outTok, req: a.req, sessions: a.sessTot });
   renderForecast(a.daily, scope.from, scope.to);
   renderPie(pieClient, [{ name: "VS Code", value: a.reqVs }, { name: "CLI", value: a.reqCli }, { name: "Claude Code", value: a.reqCla }], fmt);
@@ -246,7 +277,7 @@ projBody.addEventListener("change", e => {
 });
 // Any other way of changing the range retires the day chip - it would otherwise
 // claim a selection the controls no longer show.
-function rangeChanged() { prevRange = null; showDayChip(null); render(); }
+function rangeChanged() { floorOverridden = true; prevRange = null; showDayChip(null); render(); }
 dFrom.addEventListener("change", rangeChanged);
 dTo.addEventListener("change", rangeChanged);
 presets.addEventListener("click", e => {
@@ -285,7 +316,7 @@ const cfgView = document.getElementById("cfgView");
 const dashView = document.getElementById("dashView");
 const cfgBtn = document.getElementById("cfgBtn");
 function setTab(t) {
-  const valid = ["overview", "calendar", "breakdown", "agents", "skills", "strengths", "forecast", "diagnostics", "config"];
+  const valid = ["overview", "calendar", "breakdown", "agents", "sessions", "skills", "strengths", "forecast", "diagnostics", "config"];
   if (!valid.includes(t)) t = "overview";
   if (t === "diagnostics" && !diagnosticsOn()) t = "overview";
   for (const x of document.querySelectorAll("#tabs .tab")) {

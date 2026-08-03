@@ -285,16 +285,22 @@ Everything funnels into one shape, per project, per harness.
 project
   name                       canonical project name
   vscode | cli | claude       one client block each
-    by_day   { "2026-07-30": {sessions, requests, in, out, aiu} }
-    by_model { "claude-opus-4.8": {requests, in, out, aiu} }
+    by_day   { "2026-07-30": {sessions, requests, in, out, aiu, cached, cached_req} }
+    by_model { "claude-opus-4.8": {requests, in, out, aiu, cached, cached_req} }
     by_agent { "Researcher Subagent": {...} }
     by_am    { "agent\x1fmodel": {...} }      composite, \x1f separator
     by_dm    { "date\x1fmodel": {...} }       composite, \x1f separator
-    by_sdm   { "session\x1fdate\x1fmodel": 1 } session activity facts
+    by_sdm   { "session\x1fdate\x1fmodel": {...} }
     by_skill { "obsidian": {reads, sessions, requests, in, out, aiu} }
     by_tool  { "read_file": 3291 }             counts only
     by_lang  { "python": 42 }                  counts only
+    session_names { "<session-uuid>": "Refactor the parser" }   when recorded
 ```
+
+`cached` is a subset of `in`, not an addition; `cached_req` says how many of the
+bucket's requests reported a cache figure at all, because cache reporting began
+part-way through the recorded history. Tokens that missed the cache are
+`in - cached` and are derived when displayed rather than stored.
 
 Two bucket types do all the work: a **day bucket** (adds `sessions`) and a **flat
 bucket** (no date). `ghcp/model.py` owns both, plus `_merge`, which combines two
@@ -314,10 +320,11 @@ model list follows the date controls too.
 
 Session counts use a separate projection rather than pretending they are an
 additive model measure. `by_sdm` records each observed session/date/model tuple
-once. The dashboard intersects those facts with the date range and selected
-models, then counts distinct session IDs. A mixed-model session therefore counts
-once when either of its selected models has activity in range. With no model
-filter, the dashboard keeps the complete `by_day` session total, including
+with its own magnitudes. The dashboard intersects those keys with the date range
+and selected models, then counts distinct session IDs. A mixed-model session
+therefore counts once when either of its selected models has activity in range.
+With no model filter, the dashboard keeps the complete `by_day` session total,
+including
 recorded sessions that never reached a model.
 
 What still cannot follow a model filter, and why:
@@ -411,7 +418,8 @@ If one breaks, the change is wrong — not the test.
    three, so skill credits do not sum to the total.
 5. **No estimation anywhere.** Grep-able: there is no back-fill path left.
 6. **Session totals are never divided by model.** `by_day` and `by_skill` carry
-  totals; `by_sdm` carries idempotent membership facts used for distinct counts.
+  totals; `by_sdm` carries per-session magnitudes, and distinct session counts
+  come from its key set rather than from summing a measure.
 7. **The published shape is a contract.** Three readers consume
    `out/projects.json`, so its key names are pinned by a test that spells every
    one of them out, and the JS test harness is checked against the same record.
@@ -538,7 +546,7 @@ architecture exists and what alternative was rejected.
 | Harness boundary | Separate `vscode`, `cli`, and `claude` records | Sources have different retention and evidence quality | Flattening first would erase provenance and make diagnostics weaker |
 | Projections | Keep parallel additive dimensions | Filters and reports stay cheap in a static page | Shipping raw events would increase report size and move domain reconstruction into JavaScript |
 | Composite dimensions | Preserve pairings only when a feature needs them | `by_dm`, `by_am`, and `by_sdm` retain relationships separate aggregates lose | A generic multidimensional cube would add complexity and sparse data without a current query |
-| Session modelling | Store set-like activity facts in `by_sdm` | Sessions span models and must be distinct-counted after filtering | Dividing or summing sessions by model produces false totals |
+| Session modelling | Store per-session magnitudes in `by_sdm`, but never a session count | Sessions span days and models, so they must be distinct-counted from the key after filtering | Dividing or summing sessions by model produces false totals |
 | No-model activity | Keep it as real activity but not a selectable model | The source proves a request or active day but names no model | Dropping it hides evidence; presenting it as a model invents a choice the user never made |
 | VS Code precedence | Debug logs win over saved chat sessions | They carry richer request-level token and credit data | Reading both doubles overlapping sessions |
 | Trimmed-session floor | Count one interaction on proven activity dates, with zero tokens and credits | Creation and last-message timestamps prove activity, not volume | Ignoring them creates false empty days; estimating volume invents data |

@@ -15,7 +15,6 @@
     ]
   },
   "counted_dimensions": [
-    "by_sdm",
     "by_tool",
     "by_lang"
   ],
@@ -24,7 +23,9 @@
     "requests",
     "in",
     "out",
-    "aiu"
+    "aiu",
+    "cached",
+    "cached_req"
   ],
   "dimensions": [
     "by_day",
@@ -35,18 +36,31 @@
     "by_sdm",
     "by_skill",
     "by_tool",
-    "by_lang"
+    "by_lang",
+    "session_names"
+  ],
+  "flat_dimensions": [
+    "by_model",
+    "by_agent",
+    "by_am",
+    "by_dm",
+    "by_sdm"
   ],
   "flat_fields": [
     "requests",
     "in",
     "out",
-    "aiu"
+    "aiu",
+    "cached",
+    "cached_req"
   ],
   "harnesses": [
     "vscode",
     "cli",
     "claude"
+  ],
+  "named_dimensions": [
+    "session_names"
   ],
   "project_keys": [
     "name",

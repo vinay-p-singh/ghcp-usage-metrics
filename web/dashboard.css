@@ -380,6 +380,8 @@
                     border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); }
   .cfg-form input:focus { outline: none; border-color: var(--accent); }
   .cfg-hint { font-size: var(--fs-label); color: var(--fg-muted); line-height: 1.45; }
+  .cfg-fixed { font-size: var(--fs-label); color: var(--fg-subtle); font-weight: 400; font-style: italic; }
+  #qsFloor { background: var(--surface-2); color: var(--fg-muted); cursor: default; }
   /* calendar: how-to note, interactive cells, day tooltip, day-filter chip */
   .cal-howto { margin: -4px 0 12px; font-size: var(--fs-sm); color: var(--fg-muted); line-height: 1.55; }
   .cal-howto b { color: var(--fg); font-weight: 600; }
@@ -392,7 +394,15 @@
             box-shadow: var(--shadow); padding: 9px 11px; font-size: var(--fs-sm); color: var(--fg); }
   .dt-head { font-weight: 600; margin-bottom: 6px; }
   .dt-row { display: flex; justify-content: space-between; gap: 14px; line-height: 1.6; color: var(--fg-muted); }
+  .ptable th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+  .ptable th.sortable:hover { color: var(--fg); }
+  .ptable th.sortable::after { content: "\2195"; opacity: .3; margin-left: 4px; font-size: .9em; }
+  .ptable th.sortable[data-dir="asc"]::after { content: "\2191"; opacity: 1; color: var(--accent); }
+  .ptable th.sortable[data-dir="desc"]::after { content: "\2193"; opacity: 1; color: var(--accent); }
   .dt-row b { color: var(--fg); font-variant-numeric: tabular-nums; }
+  .dt-warn { margin-top: 7px; padding-top: 6px; border-top: 1px solid var(--border-subtle);
+             max-width: 34ch; line-height: 1.45; color: var(--warn-fg, #9a6700); }
+  .calcell.calwarn { stroke: var(--warn-fg, #9a6700); stroke-width: 1.2; }
   .dt-foot { margin-top: 7px; padding-top: 6px; border-top: 1px solid var(--border-subtle);
              font-size: var(--fs-label); color: var(--fg-subtle); }
   .daychip { display: inline-flex; align-items: center; align-self: flex-start; gap: 8px;

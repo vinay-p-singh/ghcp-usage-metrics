@@ -14,7 +14,7 @@ from collections import defaultdict
 
 from ghcp.constants import AGENT_CLI, AM_SEP, NO_TOKEN
 from ghcp.diagnostics import diag_err, src
-from ghcp.model import _add_day, _add_flat, _metrics
+from ghcp.model import _add_day, _add_flat, _metrics, name_session
 from ghcp.naming import is_junk_cwd, project_name, repo_slug
 
 
@@ -30,9 +30,12 @@ def scan_cli(cli_home: str) -> dict[str, dict]:
     try:
         uri = "file:" + db.replace("\\", "/") + "?mode=ro"
         conn = sqlite3.connect(uri, uri=True)
+        scols = {c[1] for c in conn.execute("PRAGMA table_info(sessions)")}
+        has_summary = "summary" in scols
         sid_project: dict[str, str] = {}
-        for sid, repo, cwd, created in conn.execute(
-                "SELECT id, repository, cwd, created_at FROM sessions"):
+        select = ("SELECT id, repository, cwd, created_at, "
+                  + ("summary" if has_summary else "NULL") + " FROM sessions")
+        for sid, repo, cwd, created, summary in conn.execute(select):
             slug = repo_slug(repo)
             if slug:
                 name = slug
@@ -42,14 +45,23 @@ def scan_cli(cli_home: str) -> dict[str, dict]:
                 name = ""
             if name:
                 sid_project[sid] = name
+                name_session(out[name], sid, summary)
                 if created:
                     _add_day(out[name], str(created)[:10], sessions=1)
 
+        # Cache columns arrived with a later CLI release. When they are absent we
+        # record no cache figure at all rather than a zero we did not measure.
+        ucols = {c[1] for c in
+                 conn.execute("PRAGMA table_info(assistant_usage_events)")}
+        has_cache = {"cache_read_tokens", "cache_write_tokens"} <= ucols
+        cache_cols = ("cache_read_tokens, cache_write_tokens"
+                      if has_cache else "NULL, NULL")
+
         have_usage: set[str] = set()
         cli_real_days: set[str] = set()
-        for sid, inp, outp, nano, model, created in conn.execute(
+        for sid, inp, outp, nano, model, created, c_read, c_write in conn.execute(
                 "SELECT session_id, input_tokens, output_tokens, total_nano_aiu, "
-                "model, created_at FROM assistant_usage_events"):
+                "model, created_at, " + cache_cols + " FROM assistant_usage_events"):
             have_usage.add(sid)
             name = sid_project.get(sid)
             if not name or not created:
@@ -58,18 +70,19 @@ def scan_cli(cli_home: str) -> dict[str, dict]:
             aiu = (nano or 0) / 1e9
             if not model:
                 raise ValueError(f"CLI usage event {sid} carries tokens but no model")
-            _add_day(out[name], str(created)[:10], requests=1,
-                     in_=inp or 0, out=outp or 0, aiu=aiu)
-            _add_flat(out[name]["by_model"], model, requests=1,
-                      in_=inp or 0, out=outp or 0, aiu=aiu)
-            _add_flat(out[name]["by_agent"], AGENT_CLI, requests=1,
-                      in_=inp or 0, out=outp or 0, aiu=aiu)
-            _add_flat(out[name]["by_am"], AGENT_CLI + AM_SEP + model,
-                      requests=1, in_=inp or 0, out=outp or 0, aiu=aiu)
-            _add_flat(out[name]["by_dm"], str(created)[:10] + AM_SEP + model,
-                      requests=1, in_=inp or 0, out=outp or 0, aiu=aiu)
-            out[name]["by_sdm"][sid + AM_SEP + str(created)[:10]
-                                + AM_SEP + model] = 1
+            cached = (c_read or 0) + (c_write or 0)
+            cached_req = 1 if has_cache else 0
+            day = str(created)[:10]
+            _add_day(out[name], day, requests=1, in_=inp or 0, out=outp or 0,
+                     aiu=aiu, cached=cached, cached_req=cached_req)
+            for bucket, key in ((out[name]["by_model"], model),
+                                (out[name]["by_agent"], AGENT_CLI),
+                                (out[name]["by_am"], AGENT_CLI + AM_SEP + model),
+                                (out[name]["by_dm"], day + AM_SEP + model),
+                                (out[name]["by_sdm"],
+                                 sid + AM_SEP + day + AM_SEP + model)):
+                _add_flat(bucket, key, requests=1, in_=inp or 0, out=outp or 0,
+                          aiu=aiu, cached=cached, cached_req=cached_req)
 
         # Recover pre-telemetry requests from turns as REAL request counts (each
         # turn is a call that happened). Their token/AIU magnitudes were never
@@ -89,7 +102,8 @@ def scan_cli(cli_home: str) -> dict[str, dict]:
             _add_flat(out[name]["by_agent"], AGENT_CLI, requests=1)
             _add_flat(out[name]["by_am"], AGENT_CLI + AM_SEP + NO_TOKEN, requests=1)
             _add_flat(out[name]["by_dm"], date + AM_SEP + NO_TOKEN, requests=1)
-            out[name]["by_sdm"][sid + AM_SEP + date + AM_SEP + NO_TOKEN] = 1
+            _add_flat(out[name]["by_sdm"],
+                      sid + AM_SEP + date + AM_SEP + NO_TOKEN, requests=1)
         conn.close()
         s["files_parsed"] += 1
     except Exception as e:

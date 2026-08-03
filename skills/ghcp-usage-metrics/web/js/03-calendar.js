@@ -8,10 +8,11 @@ dayTip.hidden = true;
 document.body.appendChild(dayTip);
 
 function dayTipHTML(iso, s) {
-  s = s || { req: 0, in: 0, out: 0, aiu: 0, sessions: 0 };
+  s = s || { req: 0, in: 0, out: 0, aiu: 0, sessions: 0, noToken: 0 };
   const wd = new Date(iso + "T00:00:00Z").toLocaleDateString(undefined,
     { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
   const line = (k, v) => `<div class="dt-row"><span>${k}</span><b>${v}</b></div>`;
+  const warn = dayWarning({ requests: s.req, aiu: s.aiu, noToken: s.noToken });
   return `<div class="dt-head">${esc(wd)}</div>` +
     line("Requests", fmt(s.req)) +
     line("Credits", fmtAiu(s.aiu) + " AIU") +
@@ -19,6 +20,7 @@ function dayTipHTML(iso, s) {
     line("Input", fmtK(s.in)) +
     line("Output", fmtK(s.out)) +
     (s.sessions ? line("Sessions active", fmt(s.sessions)) : "") +
+    (warn ? `<div class="dt-warn">\u26a0 ${esc(warn)}</div>` : "") +
     `<div class="dt-foot">Click to filter \u00b7 drag across days for a range</div>`;
 }
 
@@ -135,9 +137,15 @@ function renderHeatmap(stats, from, to) {
     if (iso >= from && iso <= to) {
       const n = dailyReq[iso] || 0;
       const idx = bucket(n);
-      cells += `<rect class="calcell" data-date="${iso}" x="${x}" y="${y}" width="${cell}" height="${cell}" rx="3" style="fill:${CO[idx]}"></rect>` +
+      const flagged = n > 0 && dayWarning({
+        requests: n, aiu: (stats[iso] || {}).aiu, noToken: (stats[iso] || {}).noToken });
+      cells += `<rect class="calcell${flagged ? " calwarn" : ""}" data-date="${iso}" x="${x}" y="${y}" width="${cell}" height="${cell}" rx="3" style="fill:${CO[idx]}"></rect>` +
         `<text x="${x + cell / 2}" y="${y + cell / 2 + 3.5}" text-anchor="middle" font-size="10" ` +
-        `style="fill:${idx >= 3 ? "#ffffff" : "var(--fg-muted)"}" pointer-events="none">${cur.getUTCDate()}</text>`;
+        `style="fill:${idx >= 3 ? "#ffffff" : "var(--fg-muted)"}" pointer-events="none">${cur.getUTCDate()}</text>` +
+        (flagged
+          ? `<text x="${x + cell - 3}" y="${y + 8}" text-anchor="end" font-size="9" ` +
+            `style="fill:var(--warn-fg, #9a6700)" pointer-events="none">\u26a0</text>`
+          : "");
     }
     const mo = cur.getUTCMonth();
     if (row === 0 && mo !== lastMonth) {

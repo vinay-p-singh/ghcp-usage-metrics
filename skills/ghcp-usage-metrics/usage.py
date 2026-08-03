@@ -24,7 +24,7 @@ import os
 import sys
 import time
 
-from ghcp.diagnostics import DIAG, coverage, diag_reset
+from ghcp.diagnostics import DIAG, coverage, credit_floor, diag_reset
 from ghcp.model import build_projects
 from ghcp.report import write_dashboard as _write_dashboard
 from ghcp.scan.claude import scan_claude as _scan_claude
@@ -196,6 +196,7 @@ def main() -> None:
         DIAG["elapsed"][key] = round(time.time() - t0, 2)
     projects = build_projects(results["vscode"], results["cli"], results["claude"])
     coverage(projects)
+    DIAG["credit_floor"] = credit_floor(projects)
     DIAG["elapsed"]["total"] = round(sum(DIAG["elapsed"].values()), 2)
     write_dashboard(projects)
 
@@ -209,6 +210,11 @@ def main() -> None:
     print(f"scan time: {DIAG['elapsed']['total']}s   "
           f"no-token requests: {DIAG['coverage']['requests_no_tokens']} "
           f"({DIAG['coverage']['pct_no_tokens']}%)")
+    cf = DIAG["credit_floor"]
+    if cf["floor"]:
+        print(f"credit coverage from {cf['floor']} "
+              f"(onsets {cf['onsets']}; {cf['days_before']} earlier active days "
+              "report requests but not credits)")
     print("dashboard -> out/dashboard.html   data -> out/projects.json")
 
 

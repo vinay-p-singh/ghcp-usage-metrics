@@ -187,7 +187,7 @@ function withModelLessRequests() {
   cli.by_day["2026-07-02"].requests += 40;
   cli.by_model["(no token data)"] = h.FLAT({ requests: 40 });
   cli.by_dm["2026-07-02\u001f(no token data)"] = h.FLAT({ requests: 40 });
-  cli.by_sdm["quiet1\u001f2026-07-02\u001f(no token data)"] = 1;
+  cli.by_sdm["quiet1\u001f2026-07-02\u001f(no token data)"] = h.FLAT({ requests: 40 });
   return data;
 }
 
@@ -360,7 +360,7 @@ test("a mixed-model session is counted once for either selected model", () => {
   const vs = data[0].vscode;
   vs.by_model["gpt-y"] = h.FLAT({ requests: 1, in: 100, out: 10, aiu: 5 });
   vs.by_dm["2026-07-02\u001fgpt-y"] = h.FLAT({ requests: 1, in: 100, out: 10, aiu: 5 });
-  vs.by_sdm["vs2\u001f2026-07-02\u001fgpt-y"] = 1;
+  vs.by_sdm["vs2\u001f2026-07-02\u001fgpt-y"] = h.FLAT({ requests: 1, in: 100, out: 10, aiu: 5 });
   vs.by_day["2026-07-02"].requests += 1;
   vs.by_day["2026-07-02"].in += 100;
   vs.by_day["2026-07-02"].out += 10;
@@ -658,4 +658,283 @@ test("a project name containing markup cannot inject HTML", () => {
   const { document: doc } = boot({ data });
   assert.equal(doc.querySelectorAll("#tblBody img").length, 0);
   assert.equal(doc.querySelector("#tblBody tr.prj").dataset.name, evil);
+});
+
+// ---- credit-coverage cutoff ------------------------------------------------
+// The cutoff changes which dates the page opens on. It must not change what is
+// reachable: the earlier months are incomplete, not unwanted.
+//
+// The fixture deliberately holds data in the month BEFORE the floor, otherwise
+// rounding back to the first of the month would be indistinguishable from
+// opening on the earliest day and the assertions would prove nothing.
+
+function withFloor() {
+  const diag = h.sampleDiag();
+  diag.credit_floor = {
+    floor: "2026-07-09", onsets: { vscode: "2026-05-17", cli: "2026-07-09" },
+    never_reports: ["claude"], first_day: "2026-06-15", days_before: 3
+  };
+  return diag;
+}
+
+function withEarlierMonth() {
+  const data = h.sampleData();
+  const vs = data[0].vscode;
+  vs.by_day["2026-06-15"] = { sessions: 1, requests: 2, in: 200, out: 20,
+                              aiu: 0, cached: 0, cached_req: 0 };
+  vs.by_dm["2026-06-15\u001fgpt-x"] = h.FLAT({ requests: 2, in: 200, out: 20 });
+  vs.by_sdm["vs0\u001f2026-06-15\u001fgpt-x"] = h.FLAT({ requests: 2, in: 200, out: 20 });
+  return data;
+}
+
+test("the page opens at the start of the cutoff month, not the earliest day", () => {
+  const { document: doc } = boot({ diag: withFloor(), data: withEarlierMonth() });
+  assert.equal(doc.getElementById("dFrom").value, "2026-07-01",
+               "a mid-month floor opens on the whole month it falls in");
+  assert.equal(doc.getElementById("dFrom").min, "2026-06-15",
+               "the earlier data must still be selectable");
+});
+
+test("the cutoff notice explains itself and names when each harness started", () => {
+  const { document: doc } = boot({ diag: withFloor(), data: withEarlierMonth() });
+  const notice = doc.getElementById("floorNotice");
+  assert.equal(notice.hidden, false);
+  const text = doc.getElementById("floorBody").textContent;
+  assert.match(text, /2026-07-09/);
+  assert.match(text, /VS Code from 2026-05-17/);
+  assert.match(text, /Copilot CLI from 2026-07-09/);
+  assert.match(text, /Claude Code publishes no credit figure/);
+});
+
+test("including the earlier data widens the range and retires the notice", () => {
+  const { window: win, document: doc } = boot({ diag: withFloor(), data: withEarlierMonth() });
+  doc.getElementById("floorShowAll").dispatchEvent(
+    new win.MouseEvent("click", { bubbles: true }));
+  assert.equal(doc.getElementById("dFrom").value, "2026-06-15");
+  assert.equal(doc.getElementById("floorNotice").hidden, true);
+});
+
+test("a background refresh does not drag the reader back to the floor", () => {
+  const { window: win, document: doc } = boot({ diag: withFloor() });
+  doc.getElementById("floorShowAll").dispatchEvent(
+    new win.MouseEvent("click", { bubbles: true }));
+  win.postMessage({ type: "data", projects: h.sampleData(), diag: withFloor(),
+                    phase: "full" }, "*");
+  return new Promise(resolve => win.setTimeout(() => {
+    assert.equal(doc.getElementById("dFrom").value, "2026-07-01",
+                 "the reader chose the full span; a refresh must respect it");
+    resolve();
+  }, 0));
+});
+
+test("no floor means the page opens on everything, as it always did", () => {
+  const { document: doc } = boot({});
+  assert.equal(doc.getElementById("dFrom").value, doc.getElementById("dFrom").min);
+  assert.equal(doc.getElementById("floorNotice").hidden, true);
+});
+
+test("diagnostics states when each harness began reporting credits", () => {
+  const { document: doc } = boot({ diag: withFloor(), data: withEarlierMonth() });
+  const html = doc.getElementById("diagFloor").textContent;
+  assert.match(html, /2026-07-09/, "the floor itself must be stated");
+  assert.match(html, /VS Code/);
+  assert.match(html, /2026-05-17/, "each harness onset must be listed");
+  assert.match(html, /Claude Code/, "a harness that never reports must be named");
+  assert.match(html, /3 earlier active days/, "how much sits below the floor");
+});
+
+test("with no floor the diagnostics panel says so rather than rendering blank", () => {
+  const { document: doc } = boot({});
+  const html = doc.getElementById("diagFloor").textContent;
+  assert.ok(html.trim().length > 0, "an empty panel reads as a rendering bug");
+  assert.match(html, /No AI credits/i);
+});
+
+test("config shows the computed cutoff date as a fixed, non-editable value", () => {
+  const { document: doc } = boot({ diag: withFloor(), data: withEarlierMonth() });
+  const el = doc.getElementById("qsFloor");
+  assert.match(el.value, /2026-07-01/, "the date the view opens on");
+  assert.match(el.value, /2026-07-09/, "and the measured floor behind it");
+  assert.ok(el.readOnly, "it is derived from the logs, so it is not editable");
+});
+
+test("turning the cutoff off in config opens the view on everything", () => {
+  const { window: win, document: doc } = boot({ diag: withFloor(), data: withEarlierMonth() });
+  assert.equal(doc.getElementById("dFrom").value, "2026-07-01");
+  const box = doc.getElementById("qsFloorOn");
+  assert.equal(box.checked, true, "the cutoff is on by default");
+  box.checked = false;
+  doc.getElementById("qsApply").dispatchEvent(
+    new win.MouseEvent("click", { bubbles: true }));
+  assert.equal(doc.getElementById("dFrom").value, doc.getElementById("dFrom").min,
+               "with the cutoff off the view opens on all recorded history");
+});
+
+test("with no floor computed the config field says so rather than sitting blank", () => {
+  const { document: doc } = boot({});
+  assert.match(doc.getElementById("qsFloor").value, /not|none|—/i);
+});
+
+// ---- sessions and cache surfaces -------------------------------------------
+// Both were extracted for several turns before anything showed them. A figure
+// that exists only in the JSON is not an answer to anybody.
+
+test("the sessions tab lists sessions ranked by what they cost", () => {
+  const { document: doc } = boot({});
+  doc.querySelector('#tabs .tab[data-tab="sessions"]').click();
+  const rows = [...doc.querySelectorAll("#sessionBody tr")];
+  assert.ok(rows.length >= 2, "the fixture's sessions must be listed");
+  const credits = rows.map(r => parseFloat(r.children[4].textContent.replace(/,/g, "")));
+  assert.deepEqual([...credits].sort((a, b) => b - a), credits,
+                   "rows must be ordered by credits, most expensive first");
+});
+
+test("an unnamed session shows its id and says so, rather than being blank", () => {
+  const { document: doc } = boot({});
+  doc.querySelector('#tabs .tab[data-tab="sessions"]').click();
+  const first = doc.querySelector("#sessionBody tr td");
+  assert.ok(first.textContent.trim().length > 0);
+  assert.match(first.textContent, /unnamed/,
+               "the harness fixture has no session names, so it must say so");
+});
+
+test("switching a harness off removes its sessions from the tab", () => {
+  const { window: win, document: doc } = boot({});
+  doc.querySelector('#tabs .tab[data-tab="sessions"]').click();
+  const before = doc.querySelectorAll("#sessionBody tr").length;
+  const cb = doc.getElementById("cbVs");
+  cb.checked = false;
+  cb.dispatchEvent(new win.Event("change", { bubbles: true }));
+  const after = doc.querySelectorAll("#sessionBody tr").length;
+  assert.ok(after < before, `sessions should drop from ${before}, got ${after}`);
+});
+
+test("the cache split reports how much input came from cache", () => {
+  const { document: doc } = boot({});
+  const el = doc.getElementById("cacheSplit");
+  assert.ok(el.querySelectorAll(".seg").length === 2, "cached and fresh segments");
+  assert.match(el.textContent, /From cache/);
+  assert.match(el.textContent, /Fresh/);
+});
+
+test("a partial cache answer says it is a floor rather than the whole picture", () => {
+  const data = h.sampleData();
+  const vs = data[0].vscode;
+  for (const d in vs.by_day) { vs.by_day[d].cached = 10; vs.by_day[d].cached_req = 0; }
+  const { document: doc } = boot({ data });
+  assert.match(doc.getElementById("cacheSplit").textContent, /floor/i);
+});
+
+test("a near-complete cache answer is stated, not warned about", () => {
+  // 99% coverage triggering a warning is the same wallpaper problem the day
+  // markers had: a caveat that fires everywhere stops being read.
+  const data = h.sampleData();
+  for (const p of data) {
+    for (const k of ["vscode", "cli", "claude"]) {
+      for (const d in p[k].by_day) {
+        p[k].by_day[d].cached = Math.round(p[k].by_day[d].in * 0.9);
+        p[k].by_day[d].cached_req = p[k].by_day[d].requests;
+      }
+    }
+  }
+  const { document: doc } = boot({ data });
+  const txt = doc.getElementById("cacheSplit").textContent;
+  assert.doesNotMatch(txt, /floor/i, "a complete answer must not be hedged");
+  assert.match(txt, /reported a cache figure/);
+});
+
+// ---- token-less sessions are noise in a "what did this cost" view ----------
+// Hidden by default, counted, and one click away -- the same treatment projects
+// with no recorded tokens already get. Removing them outright would be the
+// discarding the rest of this tool exists to avoid.
+
+function withQuietSession() {
+  const data = h.sampleData();
+  const vs = data[0].vscode;
+  vs.by_sdm["quietS\u001f2026-07-01\u001f(no token data)"] = h.FLAT({ requests: 3 });
+  vs.by_day["2026-07-01"].requests += 3;
+  vs.by_dm["2026-07-01\u001f(no token data)"] = h.FLAT({ requests: 3 });
+  return data;
+}
+
+test("a session with requests but no tokens is kept out of the ranking", () => {
+  const { document: doc } = boot({ data: withQuietSession() });
+  doc.querySelector('#tabs .tab[data-tab="sessions"]').click();
+  const labels = [...doc.querySelectorAll("#sessionBody tr td:first-child")]
+    .map(td => td.textContent);
+  assert.ok(!labels.some(l => /quietS/.test(l)),
+            "a session that cost nothing recordable is noise in a cost ranking");
+});
+
+test("the hidden sessions are counted and offered, never silently dropped", () => {
+  const { document: doc } = boot({ data: withQuietSession() });
+  doc.querySelector('#tabs .tab[data-tab="sessions"]').click();
+  const reveal = doc.getElementById("sessReveal");
+  assert.equal(reveal.hidden, false);
+  assert.match(reveal.textContent, /1/, "it must say how many are hidden");
+});
+
+test("revealing them brings them back into the table", () => {
+  const { window: win, document: doc } = boot({ data: withQuietSession() });
+  doc.querySelector('#tabs .tab[data-tab="sessions"]').click();
+  const before = doc.querySelectorAll("#sessionBody tr").length;
+  doc.getElementById("sessReveal").dispatchEvent(
+    new win.MouseEvent("click", { bubbles: true }));
+  const after = doc.querySelectorAll("#sessionBody tr").length;
+  assert.equal(after, before + 1);
+  assert.match(doc.getElementById("sessReveal").textContent, /hide/i);
+});
+
+test("with nothing to hide the reveal control stays out of the way", () => {
+  const { document: doc } = boot({});
+  doc.querySelector('#tabs .tab[data-tab="sessions"]').click();
+  assert.equal(doc.getElementById("sessReveal").hidden, true);
+});
+
+test("clicking a session column header sorts by it", () => {
+  const { window: win, document: doc } = boot({});
+  doc.querySelector('#tabs .tab[data-tab="sessions"]').click();
+  const th = doc.querySelector('[data-tabpanel="sessions"] th[data-sort="requests"]');
+  th.dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
+  const reqs = [...doc.querySelectorAll("#sessionBody tr")]
+    .map(r => parseFloat(r.children[3].textContent.replace(/,/g, "")));
+  assert.deepEqual(reqs, [...reqs].sort((a, b) => b - a),
+                   "a measure column opens on biggest-first");
+  assert.equal(th.getAttribute("aria-sort"), "descending");
+});
+
+test("clicking the same header again reverses it", () => {
+  const { window: win, document: doc } = boot({});
+  doc.querySelector('#tabs .tab[data-tab="sessions"]').click();
+  const th = doc.querySelector('[data-tabpanel="sessions"] th[data-sort="requests"]');
+  th.dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
+  th.dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
+  const reqs = [...doc.querySelectorAll("#sessionBody tr")]
+    .map(r => parseFloat(r.children[3].textContent.replace(/,/g, "")));
+  assert.deepEqual(reqs, [...reqs].sort((a, b) => a - b));
+  assert.equal(th.getAttribute("aria-sort"), "ascending");
+});
+
+test("the sorted column is the only one marked, so the header cannot lie", () => {
+  const { window: win, document: doc } = boot({});
+  doc.querySelector('#tabs .tab[data-tab="sessions"]').click();
+  doc.querySelector('[data-tabpanel="sessions"] th[data-sort="in"]')
+    .dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
+  const marked = [...doc.querySelectorAll('[data-tabpanel="sessions"] th.sortable')]
+    .filter(t => t.getAttribute("aria-sort") !== "none");
+  assert.equal(marked.length, 1);
+  assert.equal(marked[0].dataset.sort, "in");
+});
+
+test("the chosen sort survives a filter change", () => {
+  const { window: win, document: doc } = boot({});
+  doc.querySelector('#tabs .tab[data-tab="sessions"]').click();
+  doc.querySelector('[data-tabpanel="sessions"] th[data-sort="project"]')
+    .dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
+  const cb = doc.getElementById("cbCli");
+  cb.checked = false;
+  cb.dispatchEvent(new win.Event("change", { bubbles: true }));
+  const th = doc.querySelector('[data-tabpanel="sessions"] th[data-sort="project"]');
+  assert.equal(th.getAttribute("aria-sort"), "ascending",
+               "re-rendering must not silently reset the reader's choice");
 });

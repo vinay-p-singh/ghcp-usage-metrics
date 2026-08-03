@@ -195,7 +195,8 @@ class TestLangsFromResponse:
 class TestBuckets:
     def test_daybucket_shape(self):
         assert usage._daybucket() == {
-            "sessions": 0, "requests": 0, "in": 0, "out": 0, "aiu": 0.0}
+            "sessions": 0, "requests": 0, "in": 0, "out": 0, "aiu": 0.0,
+            "cached": 0, "cached_req": 0}
 
     def test_add_day_accumulates(self):
         m = usage._metrics()
@@ -206,9 +207,11 @@ class TestBuckets:
 
     def test_add_flat_accumulates(self):
         bucket: dict = defaultdict(usage._flatbucket)
+        usage._add_flat(bucket, "gpt", requests=1, in_=5, out=2, aiu=0.25,
+                        cached=4, cached_req=1)
         usage._add_flat(bucket, "gpt", requests=1, in_=5, out=2, aiu=0.25)
-        usage._add_flat(bucket, "gpt", requests=1, in_=5, out=2, aiu=0.25)
-        assert bucket["gpt"] == {"requests": 2, "in": 10, "out": 4, "aiu": 0.5}
+        assert bucket["gpt"] == {"requests": 2, "in": 10, "out": 4, "aiu": 0.5,
+                                 "cached": 4, "cached_req": 1}
 
 
 # --------------------------------------------------------------------------- #

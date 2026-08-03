@@ -93,7 +93,9 @@ const qs = {
   budget: document.getElementById("qsBudget"),
   auto: document.getElementById("qsAuto"),
   hideEmpty: document.getElementById("qsHideEmpty"),
-  diag: document.getElementById("qsDiag")
+  diag: document.getElementById("qsDiag"),
+  floor: document.getElementById("qsFloor"),
+  floorOn: document.getElementById("qsFloorOn")
 };
 const qsStatus = document.getElementById("qsStatus");
 function syncQuickSettings() {
@@ -104,6 +106,14 @@ function syncQuickSettings() {
   qs.auto.value = CFG.autoRefreshMinutes || 0;
   qs.hideEmpty.checked = hideEmptyOn();
   qs.diag.checked = diagnosticsOn();
+  // Derived from the logs, so it is reported rather than offered for editing.
+  const cf = (DIAG && DIAG.credit_floor) || {};
+  const floor = cf.floor || "";
+  qs.floor.value = floor
+    ? `${floor.slice(0, 8)}01  (credits complete from ${floor})`
+    : "none \u2014 no credits recorded yet";
+  qs.floorOn.checked = CFG.startAtCreditFloor !== false;
+  qs.floorOn.disabled = !floor;
 }
 function applyCfgEverywhere() {
   cfgJson.value = cfgTextFromCfg();
@@ -123,8 +133,12 @@ document.getElementById("qsApply").addEventListener("click", () => {
     budget: { monthlyAiu: num(qs.budget) },
     autoRefreshMinutes: Math.max(0, parseFloat(qs.auto.value) || 0),
     hideEmptyProjects: qs.hideEmpty.checked,
-    show: { diagnostics: qs.diag.checked }
+    show: { diagnostics: qs.diag.checked },
+    startAtCreditFloor: qs.floorOn.checked
   }));
+  // Saving is a deliberate act, so it re-opens the range the new settings imply.
+  floorOverridden = false;
+  dFrom.value = dTo.value = "";
   applyCfgEverywhere();
   setStatus(qsStatus, "ok", "Saved \u2713");
 });

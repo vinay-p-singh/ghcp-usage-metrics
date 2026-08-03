@@ -25,7 +25,13 @@ disagreement is recorded rather than hidden.
 | **Project** | The unit a reader cares about; the aggregate root | Identified by git remote slug, else folder leaf. `_canon` merges rows sharing a basename. |
 | **Request** | One recorded call to a model | The atomic fact. Everything else is a sum of these. |
 | **Session** | A distinct conversation containing requests | Unfiltered totals use every recorded session; model-filtered totals intersect activity facts with selected dates and models. |
-| **Measure** | A number that sums: requests, in, out, aiu | Never estimated. Sessions are distinct entities, not an additive model measure. |
+| **Measure** | A number that sums: requests, in, out, aiu, cached | Never estimated. Sessions are distinct entities, not an additive model measure. |
+| **Cached tokens** | Input that was served from the model's prompt cache | A *subset* of `in`, never an addition. 89.6% of all recorded input on this machine. |
+| **Miss tokens** | Input that was not served from cache: `in - cached` | Derived when displayed, never stored — storing both halves invites them to disagree. |
+| **Coverage counter** | `cached_req`: how many of a bucket's requests reported a cache figure | Cache reporting began part-way through the history, so "not reported" must stay distinct from "nothing cached". |
+| **Session name** | The short summary a session store recorded for a session | Present for ~69% of sessions; the rest were purged. Absent means absent — shown by id. |
+| **Credit onset** | The first date a harness reported any AI credits | VS Code 2026-05-17, Copilot CLI 2026-07-09. Claude Code has none and never will. |
+| **Coverage floor** | The latest onset among harnesses that report credits at all | Below it a total is arithmetically right and materially incomplete. Computed, never hardcoded. |
 | **Dimension** | A way of grouping requests: by day, model, agent, skill, tool, language | A projection of the same facts, not separate data. |
 | **Composite dimension** | A dimension keyed on multiple values joined by the separator | `by_am` (agent × model), `by_dm` (date × model), and `by_sdm` (session × date × model). |
 | **Credit / AIU** | GitHub's own `copilotUsageNanoAiu ÷ 1e9` | Never computed by us. Claude Code reports none, so its credits are zero — a fact, not a gap. |
@@ -43,24 +49,29 @@ Project  (aggregate root — the only thing the dashboard lists)
   │
   └── one record per Harness   vscode │ cli │ claude
         │
-        ├── by_day     date          → sessions, requests, in, out, aiu
-        ├── by_model   model         → requests, in, out, aiu
-        ├── by_agent   agent         → requests, in, out, aiu
-        ├── by_am      agent×model   → requests, in, out, aiu
-        ├── by_dm      date×model    → requests, in, out, aiu
-      ├── by_sdm     session×date×model → fact present (1)
+        ├── by_day     date          → sessions, requests, in, out, aiu, cached, cached_req
+        ├── by_model   model         → requests, in, out, aiu, cached, cached_req
+        ├── by_agent   agent         → requests, in, out, aiu, cached, cached_req
+        ├── by_am      agent×model   → requests, in, out, aiu, cached, cached_req
+        ├── by_dm      date×model    → requests, in, out, aiu, cached, cached_req
+        ├── by_sdm     session×date×model → the same measures
         ├── by_skill   skill         → reads, sessions, requests, in, out, aiu
         ├── by_tool    tool          → count
-        └── by_lang    language      → count
+        ├── by_lang    language      → count
+        └── session_names  session   → the name its source recorded, if any
 ```
 
 Every dimension is the same set of requests, sliced differently. That is why the
 totals must agree, and why disagreement means something is double-counted rather
 than merely inconsistent.
 
-Session totals remain on `by_day` and `by_skill`. Model membership is not stored
-as a divisible total: `by_sdm` records set-like activity facts. A session that
-uses two models has two facts but still counts once after filtering.
+`by_sdm` is the finest grain recorded, so every coarser dimension is a projection
+of it: drop the session and it is `by_dm`, drop the model too and it is `by_day`.
+
+Session *counts* remain on `by_day` and `by_skill`, and never appear on a
+breakdown. A session spans days and models, so its cells carry magnitudes only —
+distinctness comes from counting distinct keys, never from summing a measure. A
+session that used two models has two cells and still counts once.
 
 ---
 
@@ -91,7 +102,13 @@ Status is either the test that enforces it, or `NOT ENFORCED`.
 |---|---|---|
 | INV-1 | Per harness, total credits agree across `by_day`, `by_model`, `by_agent`, `by_am`, `by_dm` | `test_extract_synthetic`, `test_snapshot_live` |
 | INV-2 | `by_dm` decomposes on both axes: summed per date it equals `by_day`, per model it equals `by_model` | `test_extract_synthetic`, `test_snapshot_live` |
-| INV-3 | Session totals exist on `by_day` and `by_skill`; session/model membership is represented only by idempotent `by_sdm` facts | `test_contract`, `test_extract_synthetic` |
+| INV-28 | `by_sdm` decomposes on every axis: dropping the session reproduces `by_dm`, dropping the model too reproduces `by_day`, dropping the date reproduces `by_model` | `test_invariants`, `test_snapshot_live` |
+| INV-29 | `cached` never exceeds `in`, and `cached_req` never exceeds `requests` — cache is a subset of input, not an addition | `test_invariants`, `test_snapshot_live` |
+| INV-30 | A request that reported no cache figure is not recorded as zero cache; it raises `requests` without raising `cached_req` | `test_invariants` |
+| INV-31 | A session name exists only where a session store recorded one, capped at 120 characters, and never exceeds the sessions the harness counted | `test_invariants`, `test_snapshot_live` |
+| INV-32 | A retained chat session's tokens are read whether the source wrote them on the request or under `result.metadata` | `test_invariants` |
+| INV-33 | The coverage floor is the latest credit onset among reporting harnesses; a harness that never reports credits cannot hold it back, and no credits anywhere yields no floor rather than a guess | `test_quick_and_diagnostics`, `tests/js/qualify.test.js` |
+| INV-3 | No breakdown carries a session count; sessions are counted by distinct `by_sdm` key, never summed | `test_contract`, `test_invariants`, `test_extract_synthetic` |
 | INV-4 | Only declared composite dimensions use the separator, with exactly the declared number of parts | `test_contract` |
 | INV-5 | A project carries a name and exactly one record per harness, each with every dimension | `test_contract` |
 | INV-6 | A chat session already covered by a debug log is skipped, never counted twice | `test_extract_synthetic` |
@@ -132,6 +149,49 @@ Status is either the test that enforces it, or `NOT ENFORCED`.
 ## Known tensions
 
 Recorded because each one has already caused a bug or is positioned to.
+
+### The coverage floor is a first-sighting rule, not a completeness rule
+
+`credit_floor` takes a harness's onset to be the first date it reported *any*
+credits. That is correct for the data we have — the CLI's billing table starts
+abruptly and is complete after — but it is fragile by construction: one stray
+early credit would drag the floor backwards and hide the wrong period.
+
+Measured, and the reason this is written down rather than fixed: the CLI's
+`~/.copilot/session-state/*/events.jsonl` rollups carry credits on only **31 of
+209** otherwise-usable sessions, scattered from 2026-05-13 to the present. Had
+that source been adopted, three May sessions would have moved the CLI onset back
+two months on the strength of 1.4% of the data.
+
+The honest definition is "the first date from which the harness credits
+essentially all of its token-bearing requests". That needs a threshold and has
+to tolerate an incomplete trailing edge, so it is a judgement call rather than a
+correction. **Decided: leave the first-sighting rule, document the weakness.**
+
+### The CLI keeps a session store we deliberately do not read
+
+`~/.copilot/session-state/<sid>/events.jsonl` (286 files, 215 MB) carries
+per-model `modelMetrics` with input, output, cache read/write, reasoning and
+`totalNanoAiu`, and **277 of 286 sessions have no row in the billing table**. It
+is tempting, and it is not used. Three findings decided it:
+
+- Only **31 of 209** clean sessions record credits at all; 178 record tokens and
+  zero credits, right up to the present. Adopting the 31 would cherry-pick the
+  expensive sessions — 14,444 of 18,479 credits come from three of them.
+- **11 sessions span 2–4 days** and the rollup is a session total, so a date
+  would have to be chosen. `assistant.message` events carry a timestamp, a model
+  and `outputTokens` — but no input, cache or credits — so a per-day split would
+  be estimation.
+- **4 sessions carry contradictory rollups.** One repeats an identical total four
+  times (last-wins is right, summing overcounts 4×); another goes 49.5M then
+  21.9M (a counter reset, so last-wins *under*counts). No single rule is correct
+  for all of them.
+
+What the investigation did establish, and is kept: its cache read + write comes
+to **99.4%** of input against the official report's **99.85%**, confirming that
+GitHub counts cache *writes* as cached input while VS Code's `cachedTokens`
+reports reads only. That is why our VS Code cache share reads ~94% and the CLI's
+reads ~99%, and why the two are not directly comparable.
 
 ### A comment that outlived its truth
 
@@ -197,8 +257,9 @@ The rules above imply the procedure, and `by_dm` is the worked example.
    values on the same event. `by_dm` was thought impossible for months because
    nobody looked; the pairing was there the whole time and was being thrown away.
 2. **Decide whether it carries measures or facts.** If a unit can span another,
-   do not divide it. `by_dm` carries no sessions; `by_sdm` records membership
-   facts and leaves distinct counting to the query.
+   do not divide it. `by_dm` carries no sessions, and neither does `by_sdm`:
+   a session spans days and models, so its cells carry magnitudes and the
+   distinct count is left to the query.
 3. **Write the invariant before the code**, as a test that fails.
 4. Add it to `_metrics`, `_merge`, and every attribution site, then extend the
    cross-dimension assertion so the new dimension must reconcile with the others.

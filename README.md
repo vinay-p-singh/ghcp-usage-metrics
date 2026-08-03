@@ -175,10 +175,14 @@ approximate one. Worth knowing before you trust a number:
 
 | Limitation                      | What it means in practice                                                                                          |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Credits start at a floor        | Each harness began reporting AI credits at a different time — VS Code months before the Copilot CLI. The dashboard computes that floor and opens there, so a total never averages complete months against incomplete ones. Earlier data is kept and still selectable; Config shows the computed date and Diagnostics explains it. |
 | AIU predates its own telemetry  | Sessions logged before `copilotUsageNanoAiu` existed count real requests and tokens but add zero AIU. Early months read low because the metric is missing, not because usage was. |
 | Claude Code reports no AIU      | Its requests and tokens are real; its AIU is genuinely zero. That is silence, not thrift.                          |
+| "Cached" is not one definition  | VS Code publishes a single `cachedTokens` (cache reads); the CLI publishes reads and writes separately and both are counted. So VS Code's cache share reads ~94% and the CLI's ~99% for the same behaviour. GitHub's own reports count writes too. |
+| Cache reporting started later   | Roughly 8% of VS Code requests predate it. Those raise the request count without raising the cache count, so "not reported" stays distinct from "nothing cached" rather than being recorded as zero. |
+| The newest days under-report    | The CLI writes its billing rows when a session closes, so the most recent day or two can show requests with no credits yet. A floor fixes the start of the series, not the end. |
 | Agent personas fold together    | Only subagents launched through the `runSubagent` tool get their own attribution. Agent-picker modes are recorded as "GitHub Copilot Chat". |
-| Session retention is short      | VS Code keeps roughly the 70 most recent sessions in its store, so older agent and skill runs are purged and unrecoverable. |
+| Session retention is short      | VS Code keeps roughly the 70 most recent sessions in its store, so older agent and skill runs are purged and unrecoverable. Session names exist for about two thirds of sessions; the rest show their id. |
 | Some breakdowns ignore dates    | Per-day buckets carry no agent or skill dimension, so those breakdowns are lifetime totals. Models are dated and do follow `--since` / `--until`. |
 | Skill totals overlap            | A session that invoked three skills counts its tokens toward all three, so skill AIU does not sum to the overall total. |
 | Logs rotate                     | VS Code debug logs are trimmed and saved chat sessions keep only some requests, so older days are sparse. Real, recorded, and thin. |

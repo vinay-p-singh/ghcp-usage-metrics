@@ -64,6 +64,28 @@ def mask_paths(text: str) -> str:
     return re.sub(r"/(?:home|Users)/[^/\"]+", "/home/you", text)
 
 
+# Session names are free text a session store wrote to describe real work, so
+# they are the most revealing field in the extract. Replaced wholesale rather
+# than pattern-matched: a deny-list would only catch the phrasings I thought of.
+TOPICS = [
+    "Fix failing build", "Add retry to the client", "Review the migration",
+    "Trace a flaky test", "Refactor the parser", "Wire up the dashboard",
+    "Tidy the release notes", "Investigate a timeout", "Split a large module",
+    "Rename a public field", "Update the fixtures", "Chase a memory leak",
+]
+
+
+def mask_session_names(projects: list[dict]) -> int:
+    masked = 0
+    for p in projects:
+        for client in ("vscode", "cli", "claude"):
+            names = p.get(client, {}).get("session_names") or {}
+            for i, sid in enumerate(sorted(names)):
+                names[sid] = TOPICS[(masked + i) % len(TOPICS)]
+            masked += len(names)
+    return masked
+
+
 def main() -> None:
     with open(os.path.join(SRC, "projects.json"), encoding="utf-8") as f:
         projects = json.load(f)
@@ -76,10 +98,12 @@ def main() -> None:
     for row in diag.get("no_token_rows", []):
         row["project"] = names.get(row["project"], row["project"])
 
+    sessions_masked = mask_session_names(projects)
     diag = json.loads(mask_paths(json.dumps(diag)))
 
     write_dashboard(projects, DST, diag)
-    print(f"{len(projects)} projects anonymised -> {os.path.join(DST, 'dashboard.html')}")
+    print(f"{len(projects)} projects and {sessions_masked} session names "
+          f"anonymised -> {os.path.join(DST, 'dashboard.html')}")
 
 
 if __name__ == "__main__":

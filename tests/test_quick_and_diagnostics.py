@@ -150,3 +150,59 @@ def test_write_dashboard_injects_diagnostics(tmp_path, monkeypatch):
     written = json.loads((tmp_path / "out" / "diagnostics.json").read_text(encoding="utf-8"))
     assert written["quick_days"] == 7
     assert written["partial"] is True
+
+
+# --------------------------------------------------------------------------- #
+# Credit-coverage floor
+#
+# A harness either reports GitHub AI credits or never does. Before the last of
+# the reporting harnesses started, a total is arithmetically correct and
+# materially incomplete -- which is exactly the shape of number this project
+# refuses to present without saying so.
+# --------------------------------------------------------------------------- #
+def _client(day_aiu: dict) -> dict:
+    return {"by_day": {d: {"sessions": 0, "requests": 1, "in": 1, "out": 1,
+                           "aiu": a, "cached": 0, "cached_req": 0}
+                       for d, a in day_aiu.items()},
+            "by_model": {}, "by_agent": {}, "by_am": {}, "by_dm": {},
+            "by_sdm": {}, "by_skill": {}, "by_tool": {}, "by_lang": {},
+            "session_names": {}}
+
+
+def _row(vscode=None, cli=None, claude=None):
+    return {"name": "p", "vscode": _client(vscode or {}),
+            "cli": _client(cli or {}), "claude": _client(claude or {})}
+
+
+def test_floor_is_the_latest_onset_among_reporting_harnesses():
+    from ghcp.diagnostics import credit_floor
+    got = credit_floor([_row(vscode={"2026-05-17": 5.0, "2026-06-01": 2.0},
+                             cli={"2026-07-09": 1.0})])
+    assert got["onsets"] == {"vscode": "2026-05-17", "cli": "2026-07-09"}
+    assert got["floor"] == "2026-07-09", "the floor is set by the last one to start"
+
+
+def test_a_harness_that_never_reports_credits_does_not_hold_the_floor_back():
+    """Claude Code publishes no credit figure at all. Treating that as 'has not
+    started yet' would push the floor to the end of time and hide everything."""
+    from ghcp.diagnostics import credit_floor
+    got = credit_floor([_row(vscode={"2026-05-17": 5.0},
+                             claude={"2026-03-01": 0.0, "2026-07-01": 0.0})])
+    assert got["floor"] == "2026-05-17"
+    assert got["never_reports"] == ["claude"]
+    assert "claude" not in got["onsets"]
+
+
+def test_days_before_the_floor_are_counted_so_the_note_can_say_how_many():
+    from ghcp.diagnostics import credit_floor
+    got = credit_floor([_row(vscode={"2026-01-08": 0.0, "2026-02-01": 0.0,
+                                     "2026-05-17": 5.0})])
+    assert got["first_day"] == "2026-01-08"
+    assert got["days_before"] == 2
+
+
+def test_no_credits_anywhere_means_no_floor_rather_than_a_guess():
+    from ghcp.diagnostics import credit_floor
+    got = credit_floor([_row(vscode={"2026-01-08": 0.0})])
+    assert got["floor"] is None
+    assert got["onsets"] == {}

@@ -109,6 +109,9 @@ const pieSkill    = document.getElementById("pieSkill");
 const fcView      = document.getElementById("fcView");
 const stView      = document.getElementById("stView");
 let AGENT_MODELS = {};
+// Set once the reader picks their own dates, so a background refresh never
+// drags them back to the credit-coverage floor.
+let floorOverridden = false;
 let CUR = { vs: true, cli: true, cla: true, from: "0000", to: "9999" };
 let curPerProj = [];
 

@@ -33,7 +33,7 @@ def scan_claude(claude_root: str) -> dict[str, dict]:
             s["files_deferred"] += 1
             continue
         name = ""
-        rows: list[tuple[str, str, int, int]] = []
+        rows: list[tuple[str, str, int, int, int]] = []
         first_date: str | None = None
         try:
             with open(path, encoding="utf-8") as f:
@@ -59,11 +59,11 @@ def scan_claude(claude_root: str) -> dict[str, dict]:
                     if not date:
                         continue
                     u = msg.get("usage") or {}
-                    in_ = ((u.get("input_tokens") or 0)
-                           + (u.get("cache_creation_input_tokens") or 0)
-                           + (u.get("cache_read_input_tokens") or 0))
+                    cached = ((u.get("cache_creation_input_tokens") or 0)
+                              + (u.get("cache_read_input_tokens") or 0))
+                    in_ = (u.get("input_tokens") or 0) + cached
                     out_ = u.get("output_tokens") or 0
-                    rows.append((date, model, in_, out_))
+                    rows.append((date, model, in_, out_, cached))
                     if first_date is None or date < first_date:
                         first_date = date
         except Exception as e:
@@ -74,15 +74,16 @@ def scan_claude(claude_root: str) -> dict[str, dict]:
             continue
         m = out[name]
         sid = os.path.splitext(os.path.basename(path))[0]
-        for date, model, in_, out_ in rows:
-            _add_day(m, date, requests=1, in_=in_, out=out_)
-            _add_flat(m["by_model"], model, requests=1, in_=in_, out=out_)
-            _add_flat(m["by_agent"], AGENT_CLAUDE, requests=1, in_=in_, out=out_)
-            _add_flat(m["by_am"], AGENT_CLAUDE + AM_SEP + model, requests=1,
-                      in_=in_, out=out_)
-            _add_flat(m["by_dm"], date + AM_SEP + model, requests=1,
-                      in_=in_, out=out_)
-            m["by_sdm"][sid + AM_SEP + date + AM_SEP + model] = 1
+        for date, model, in_, out_, cached in rows:
+            _add_day(m, date, requests=1, in_=in_, out=out_, cached=cached,
+                     cached_req=1)
+            for bucket, key in ((m["by_model"], model),
+                                (m["by_agent"], AGENT_CLAUDE),
+                                (m["by_am"], AGENT_CLAUDE + AM_SEP + model),
+                                (m["by_dm"], date + AM_SEP + model),
+                                (m["by_sdm"], sid + AM_SEP + date + AM_SEP + model)):
+                _add_flat(bucket, key, requests=1, in_=in_, out=out_,
+                          cached=cached, cached_req=1)
         if first_date:
             _add_day(m, first_date, sessions=1)
     return out

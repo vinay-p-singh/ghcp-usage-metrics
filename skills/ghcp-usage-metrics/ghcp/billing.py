@@ -19,6 +19,10 @@ from ghcp.model import _add_day, _add_flat, _flatbucket
 from ghcp.normalize import _utc_date_ms
 from ghcp.window import in_window
 
+# Bumped whenever a summary gains a field. A record from an older version is
+# re-parsed rather than trusted, so a stale cache cannot silently omit a measure.
+CACHE_VERSION = 2
+
 
 def load_cache(path: str) -> dict:
     try:
@@ -41,13 +45,17 @@ def billing_for_file(path: str, cache: dict) -> dict:
     """Per-day llm billing from one main.jsonl, memoised by path + size + mtime.
 
     Counts every request that carries ``inputTokens`` (real input/output tokens)
-    and sums ``copilotUsageNanoAiu`` where GitHub reported it. Nothing is
-    estimated: requests logged before AIU reporting existed contribute their
-    real tokens and simply add 0 AIU.
+    and sums ``copilotUsageNanoAiu`` where GitHub reported it. ``cachedTokens``
+    is part of the input, not extra, and only exists on requests logged after
+    cache reporting began -- ``cached_req`` counts how many said so, so a silent
+    zero is never mistaken for a measured one. Nothing is estimated: requests
+    logged before AIU reporting existed contribute their real tokens and simply
+    add 0 AIU.
 
-    Returns {"size", "mtime",
-             "by_day": {date: {requests, in, out, aiu}},
-             "by_model": {model: {requests, in, out, aiu}},
+    Returns {"v", "size", "mtime",
+             "by_day": {date: {requests, in, out, aiu, cached, cached_req}},
+             "by_model": {model: {...}},
+             "by_dm": {date+SEP+model: {...}},
              "tools": {tool_name: count},          # from tool_call events
              "childrefs": {childLogFile: label},   # subagent/title child logs
              "bad": int}                           # unparseable lines, skipped
@@ -56,9 +64,7 @@ def billing_for_file(path: str, cache: dict) -> dict:
     hit = cache.get(path)
     if (hit and hit.get("size") == st.st_size
             and hit.get("mtime") == int(st.st_mtime)
-            and "by_day" in hit and "by_model" in hit
-            and "childrefs" in hit and "tools" in hit and "cal" not in hit
-            and "by_dm" in hit):
+            and hit.get("v") == CACHE_VERSION):
         return hit
     by_day: dict[str, dict] = {}
     by_model: dict[str, dict] = {}
@@ -103,22 +109,20 @@ def billing_for_file(path: str, cache: dict) -> dict:
                 raise ValueError(f"billing event carries tokens but no model: {a!r}")
             nano = a.get("copilotUsageNanoAiu")
             aiu = (nano / 1e9) if nano is not None else 0.0
+            ct = a.get("cachedTokens")
+            cached = ct or 0
+            cached_req = 1 if ct is not None else 0
             d = by_day.setdefault(_utc_date_ms(ts), _flatbucket())
             mm = by_model.setdefault(model, _flatbucket())
             dm = by_dm.setdefault(_utc_date_ms(ts) + AM_SEP + model, _flatbucket())
-            d["requests"] += 1
-            d["in"] += it
-            d["out"] += ot
-            d["aiu"] += aiu
-            mm["requests"] += 1
-            mm["in"] += it
-            mm["out"] += ot
-            mm["aiu"] += aiu
-            dm["requests"] += 1
-            dm["in"] += it
-            dm["out"] += ot
-            dm["aiu"] += aiu
-    rec = {"size": st.st_size, "mtime": int(st.st_mtime),
+            for b in (d, mm, dm):
+                b["requests"] += 1
+                b["in"] += it
+                b["out"] += ot
+                b["aiu"] += aiu
+                b["cached"] += cached
+                b["cached_req"] += cached_req
+    rec = {"v": CACHE_VERSION, "size": st.st_size, "mtime": int(st.st_mtime),
            "by_day": by_day, "by_model": by_model, "by_dm": by_dm, "tools": tools,
            "childrefs": childrefs, "bad": bad}
     cache[path] = rec
@@ -134,25 +138,32 @@ def apply_billing(m: dict, agent: str, rec: dict) -> tuple[int, int, int, float]
     """
     for date, b in rec.get("by_day", {}).items():
         _add_day(m, date, requests=b["requests"], in_=b["in"],
-                 out=b["out"], aiu=b["aiu"])
+                 out=b["out"], aiu=b["aiu"], cached=b.get("cached", 0),
+                 cached_req=b.get("cached_req", 0))
     for tname, tc in rec.get("tools", {}).items():
         m["by_tool"][tname] += tc
     req = in_ = out = 0
     aiu = 0.0
     for model, b in rec.get("by_model", {}).items():
-        _add_flat(m["by_model"], model, requests=b["requests"],
-                  in_=b["in"], out=b["out"], aiu=b["aiu"])
-        _add_flat(m["by_am"], agent + AM_SEP + model, requests=b["requests"],
-                  in_=b["in"], out=b["out"], aiu=b["aiu"])
+        for bucket, key in ((m["by_model"], model),
+                            (m["by_am"], agent + AM_SEP + model)):
+            _add_flat(bucket, key, requests=b["requests"], in_=b["in"],
+                      out=b["out"], aiu=b["aiu"], cached=b.get("cached", 0),
+                      cached_req=b.get("cached_req", 0))
         req += b["requests"]
         in_ += b["in"]
         out += b["out"]
         aiu += b["aiu"]
     for key, b in rec.get("by_dm", {}).items():
-        _add_flat(m["by_dm"], key, requests=b["requests"],
-                  in_=b["in"], out=b["out"], aiu=b["aiu"])
+        _add_flat(m["by_dm"], key, requests=b["requests"], in_=b["in"],
+                  out=b["out"], aiu=b["aiu"], cached=b.get("cached", 0),
+                  cached_req=b.get("cached_req", 0))
     if req:
-        _add_flat(m["by_agent"], agent, requests=req, in_=in_, out=out, aiu=aiu)
+        _add_flat(m["by_agent"], agent, requests=req, in_=in_, out=out, aiu=aiu,
+                  cached=sum(b.get("cached", 0)
+                             for b in rec.get("by_model", {}).values()),
+                  cached_req=sum(b.get("cached_req", 0)
+                                 for b in rec.get("by_model", {}).values()))
     return req, in_, out, aiu
 
 
@@ -177,8 +188,7 @@ def cache_hit(cache: dict, path: str) -> bool:
     hit = cache.get(path)
     return bool(hit and hit.get("size") == st.st_size
                 and hit.get("mtime") == int(st.st_mtime)
-                and "by_day" in hit and "by_model" in hit and "by_dm" in hit
-                and "childrefs" in hit and "tools" in hit and "cal" not in hit)
+                and hit.get("v") == CACHE_VERSION)
 
 
 def prewarm(cache: dict, roots: list[str]) -> None:

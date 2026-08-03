@@ -55,12 +55,19 @@
   <button class="tbtn" id="logEnableBtn">Diagnostics</button>
   <button class="notice-x" id="logDismiss" title="Dismiss" aria-label="Dismiss">&times;</button>
 </div>
+<div class="notice" id="floorNotice" hidden>
+  <span class="notice-ico">&#9432;</span>
+  <div class="notice-body" id="floorBody"></div>
+  <button class="tbtn" id="floorShowAll">Include earlier</button>
+  <button class="notice-x" id="floorDismiss" title="Dismiss" aria-label="Dismiss">&times;</button>
+</div>
 
 <nav class="tabs" id="tabs" role="tablist" aria-label="Dashboard views">
   <button class="tab active" role="tab" aria-selected="true" data-tab="overview">Overview</button>
   <button class="tab" role="tab" aria-selected="false" data-tab="calendar">Calendar</button>
   <button class="tab" role="tab" aria-selected="false" data-tab="breakdown">Breakdown</button>
   <button class="tab" role="tab" aria-selected="false" data-tab="agents">Agents</button>
+  <button class="tab" role="tab" aria-selected="false" data-tab="sessions">Sessions</button>
   <button class="tab" role="tab" aria-selected="false" data-tab="skills">Skills</button>
   <button class="tab" role="tab" aria-selected="false" data-tab="strengths">Strengths</button>
   <button class="tab" role="tab" aria-selected="false" data-tab="forecast">Forecast</button>
@@ -194,6 +201,10 @@
         <h3>Code output by language</h3>
         <div id="pieLang"></div>
       </div>
+      <div class="panel">
+        <h3>Input tokens: cache vs fresh <span class="hint">&mdash; most of what a long conversation sends is the conversation itself, read back from the model's prompt cache. Cache is part of the input figure, not extra.</span></h3>
+        <div id="cacheSplit"></div>
+      </div>
     </section>
 
     <section class="tabpanel" data-tabpanel="agents">
@@ -214,6 +225,29 @@
       <div class="panel">
         <h3>AIU by agent</h3>
         <div id="pieAgent"></div>
+      </div>
+    </section>
+
+    <section class="tabpanel" data-tabpanel="sessions">
+      <div class="panel">
+        <h3>Sessions by cost <span class="hint">&mdash; one row per conversation, folded across the days and models it spanned. The label is whatever the session store recorded, which is usually the opening prompt rather than a tidy title; sessions older than the store keeps show their id instead.</span></h3>
+        <button type="button" class="act proj-reveal" id="sessReveal" hidden></button>
+        <div class="ptable-scroll">
+          <table class="ptable">
+            <thead><tr>
+              <th class="sortable" data-sort="name">Session</th>
+              <th class="sortable" data-sort="project">Project</th>
+              <th class="sortable" data-sort="when">When</th>
+              <th class="sortable num" data-sort="requests">Requests</th>
+              <th class="sortable num" data-sort="aiu">AIU</th>
+              <th class="sortable num" data-sort="perReq">AIU / req</th>
+              <th class="sortable num" data-sort="in">Input</th>
+              <th class="sortable num" data-sort="cached">Cached</th>
+              <th class="sortable num" data-sort="out">Output</th>
+            </tr></thead>
+            <tbody id="sessionBody"></tbody>
+          </table>
+        </div>
       </div>
     </section>
 
@@ -268,6 +302,10 @@
       <div class="panel">
         <h3>Requests with no token data <span class="hint">&mdash; real calls whose source never wrote down their size. This is why some projects show requests but no credits.</span></h3>
         <div id="diagCoverage"></div>
+      </div>
+      <div class="panel">
+        <h3>Credit coverage <span class="hint">&mdash; when each harness started reporting AI credits, and what that means for older figures.</span></h3>
+        <div id="diagFloor"></div>
       </div>
       <div class="panel">
         <h3>Sources read</h3>
@@ -328,6 +366,13 @@
       <label class="cfg-check"><span><input type="checkbox" id="qsDiag"> Show the Diagnostics tab</span>
         <span class="cfg-hint">Scan coverage, parse failures and the per-project breakdown of requests that carry no token payload. Useful when a number looks wrong; noise the rest of the time.</span>
       </label>
+      <label>Cutoff date <span class="cfg-fixed">computed from your logs</span>
+        <input type="text" id="qsFloor" readonly tabindex="-1">
+        <span class="cfg-hint">Credit reporting switched on part-way through a month &mdash; VS Code began months before the Copilot CLI did. The view opens at the start of the month in which the last harness began reporting, so you get a whole month rather than a fragment. This is measured, not a setting: it moves on its own if your logs change. Days inside the range that are still thin are marked with &#9888; rather than removed &mdash; hover any day for what is missing.</span>
+      </label>
+      <label class="cfg-check"><span><input type="checkbox" id="qsFloorOn"> Open the view at that cutoff</span>
+        <span class="cfg-hint">On = the dashboard starts at the date above. The earlier data is never removed &mdash; the date range still reaches all of it, and the Diagnostics tab lists what those days do and do not contain. Off = open on your full recorded history.</span>
+      </label>
     </div>
     <div class="cfg-actions">
       <button class="tbtn primary" id="qsApply">Save settings</button>
@@ -344,7 +389,7 @@
       <button class="tbtn" id="cfgDownload">Download config.json</button>
       <span class="cfg-status" id="cfgStatus"></span>
     </div>
-    <p class="cfg-note"><b>Fully honoured</b> (re-scopes every number): <code>since</code>, <code>until</code> (YYYY-MM-DD), <code>exclude.projects</code> (case-insensitive substring), <code>exclude.project_prefixes</code> (starts-with), <code>exclude.clients</code> (<code>vscode</code> / <code>cli</code> / <code>claude</code>).<br><b>Breakdown-only</b>: <code>exclude.agents</code> filters the agent panels but cannot re-scope the daily totals, because GitHub's per-day telemetry carries no agent. <code>exclude.models</code> is a hard filter and does re-scope everything, since the logs do record a model per request.<br><b>Cost</b>: <code>cost.usdPerAiu</code> (omitted / 0 = every cost figure hidden). GitHub does not publish a machine-readable credit price and none is recorded locally, so costs are only ever <i>your configured rate &times; recorded credits</i> &mdash; a projection, never an invoice.<br><b>Auto-refresh</b>: <code>autoRefreshMinutes</code> (0 = off). Inside the VS Code extension this re-scans your logs live on that interval; in a plain browser it reloads the report.<br><b>Forecast budget</b>: <code>budget.monthlyAiu</code> (0 / omitted = no budget) drives the Forecast tab's budget comparison; with no budget it shows projected charges only.<br><b>Default view</b>: <code>hideEmptyProjects</code> (default <code>true</code>) starts projects that never recorded a token or a credit unticked and tucks them behind a link in the sidebar &mdash; they are hidden, never discarded. <code>show.diagnostics</code> (default <code>true</code>) controls whether the Diagnostics tab is offered at all.</p>
+    <p class="cfg-note"><b>Fully honoured</b> (re-scopes every number): <code>since</code>, <code>until</code> (YYYY-MM-DD), <code>exclude.projects</code> (case-insensitive substring), <code>exclude.project_prefixes</code> (starts-with), <code>exclude.clients</code> (<code>vscode</code> / <code>cli</code> / <code>claude</code>).<br><b>Breakdown-only</b>: <code>exclude.agents</code> filters the agent panels but cannot re-scope the daily totals, because GitHub's per-day telemetry carries no agent. <code>exclude.models</code> is a hard filter and does re-scope everything, since the logs do record a model per request.<br><b>Cost</b>: <code>cost.usdPerAiu</code> (omitted / 0 = every cost figure hidden). GitHub does not publish a machine-readable credit price and none is recorded locally, so costs are only ever <i>your configured rate &times; recorded credits</i> &mdash; a projection, never an invoice.<br><b>Auto-refresh</b>: <code>autoRefreshMinutes</code> (0 = off). Inside the VS Code extension this re-scans your logs live on that interval; in a plain browser it reloads the report.<br><b>Forecast budget</b>: <code>budget.monthlyAiu</code> (0 / omitted = no budget) drives the Forecast tab's budget comparison; with no budget it shows projected charges only.<br><b>Default view</b>: <code>hideEmptyProjects</code> (default <code>true</code>) starts projects that never recorded a token or a credit unticked and tucks them behind a link in the sidebar &mdash; they are hidden, never discarded. <code>show.diagnostics</code> (default <code>true</code>) controls whether the Diagnostics tab is offered at all. <code>startAtCreditFloor</code> (default <code>true</code>) opens the view on the first date every harness was reporting AI credits, so a headline never averages complete months together with months that recorded requests only; the earlier data stays selectable.</p>
   </div>
 </section>
 

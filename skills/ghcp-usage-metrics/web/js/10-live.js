@@ -38,6 +38,7 @@ window.addEventListener("message", ev => {
   initData(msg.projects);
   render();
   renderDiagnostics();
+  renderFloorNotice();
   updatePartialBanner();
   refreshBtn.disabled = false;
   refreshBtn.innerHTML = "&#8635; Refresh data";
@@ -76,6 +77,59 @@ updatePartialBanner();
     try { localStorage.setItem("cpLogNotice", "off"); } catch (e) {}
   });
 })();
+
+// ---- credit-coverage floor notice -----------------------------------------
+// Say why the view starts where it does, and make the earlier data one click
+// away. Nothing is discarded -- it is just not mixed into a headline that would
+// then be comparing complete months against incomplete ones.
+function renderFloorNotice() {
+  const notice = document.getElementById("floorNotice");
+  const body = document.getElementById("floorBody");
+  if (!notice || !body) return;
+  const cf = (DIAG && DIAG.credit_floor) || {};
+  const showing = dFrom.value;
+  // The view opens at the start of the floor's month, so compare against that
+  // and not the floor itself -- otherwise the notice hides exactly when shown.
+  const opensAt = cf.floor ? cf.floor.slice(0, 8) + "01" : "";
+  let dismissed = false;
+  try { dismissed = localStorage.getItem("cpFloorNotice") === "off"; } catch (e) {}
+  if (!cf.floor || !cf.days_before || dismissed || showing < opensAt) {
+    notice.hidden = true;
+    return;
+  }
+  const onsets = Object.entries(cf.onsets || {})
+    .map(([k, v]) => `${CLIENT_NAME[k] || k} from ${v}`).join(", ");
+  const never = (cf.never_reports || [])
+    .map(k => CLIENT_NAME[k] || k).join(", ");
+  body.innerHTML =
+    `<b>Showing usage from ${esc(cf.floor)}, when every harness was reporting AI credits.</b> ` +
+    `${esc(onsets)}. ${cf.days_before} earlier active day${cf.days_before === 1 ? "" : "s"} ` +
+    `(back to ${esc(cf.first_day || "")}) recorded requests but no credits, so including them ` +
+    `would compare complete months against incomplete ones. The data is still there.` +
+    (never ? ` ${esc(never)} publishes no credit figure at all.` : "");
+  notice.hidden = false;
+}
+
+(function () {
+  const showAll = document.getElementById("floorShowAll");
+  const dismiss = document.getElementById("floorDismiss");
+  if (showAll) {
+    showAll.addEventListener("click", () => {
+      floorOverridden = true;
+      dFrom.value = MIN;
+      dTo.value = MAX;
+      rangeChanged();
+      renderFloorNotice();
+    });
+  }
+  if (dismiss) {
+    dismiss.addEventListener("click", () => {
+      document.getElementById("floorNotice").hidden = true;
+      try { localStorage.setItem("cpFloorNotice", "off"); } catch (e) {}
+    });
+  }
+})();
+renderFloorNotice();
 
 // Tell the extension the message listener is live; anything it produced while
 // this page was still loading gets flushed now instead of being lost.

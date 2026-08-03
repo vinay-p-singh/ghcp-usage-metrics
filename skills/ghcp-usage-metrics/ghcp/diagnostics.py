@@ -111,4 +111,46 @@ def coverage(projects: list[dict]) -> None:
     DIAG["no_token_rows"] = rows
 
 
+def credit_floor(projects: list[dict]) -> dict:
+    """The earliest date from which every credit-reporting harness was reporting.
+
+    Credit telemetry did not arrive everywhere at once: VS Code began months
+    before the CLI did. Below the last of those start dates a total is
+    arithmetically correct and materially incomplete, because at least one
+    harness was contributing requests and no credits at all.
+
+    A harness that never reports credits (Claude Code publishes none) is not
+    "yet to start" -- excluding it is the difference between a usable floor and
+    one that hides everything.
+
+    Returns the floor, each harness's onset, the ones that never report, and how
+    many active days fall below the floor, so the dashboard can say why the
+    earlier period looks empty rather than leaving a reader to guess.
+    """
+    onsets: dict[str, str] = {}
+    never: list[str] = []
+    days: set[str] = set()
+    for client in ("vscode", "cli", "claude"):
+        first = None
+        seen = False
+        for p in projects:
+            for date, b in p.get(client, {}).get("by_day", {}).items():
+                days.add(date)
+                seen = True
+                if b.get("aiu", 0) > 0 and (first is None or date < first):
+                    first = date
+        if first:
+            onsets[client] = first
+        elif seen:
+            never.append(client)
+    floor = max(onsets.values()) if onsets else None
+    return {
+        "floor": floor,
+        "onsets": onsets,
+        "never_reports": never,
+        "first_day": min(days) if days else None,
+        "days_before": len([d for d in days if floor and d < floor]),
+    }
+
+
 diag_reset()

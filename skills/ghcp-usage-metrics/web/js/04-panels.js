@@ -140,8 +140,14 @@ function initData(projects) {
   if (MAX < MIN) MAX = MIN;
   dFrom.min = dTo.min = MIN;
   dFrom.max = dTo.max = MAX;
-  if (wasFullSpan) { dFrom.value = MIN; dTo.value = MAX; }
-  else { dFrom.value = clampDate(dFrom.value); dTo.value = clampDate(dTo.value); }
+  // Open on the credit-complete period, but leave the whole span selectable --
+  // the earlier months are incomplete, not unwanted.
+  if (wasFullSpan) {
+    dFrom.value = clampToSpan(
+      creditFloorStart(DIAG, MIN, CFG.since,
+                       CFG.startAtCreditFloor && !floorOverridden), MIN, MAX);
+    dTo.value = MAX;
+  } else { dFrom.value = clampDate(dFrom.value); dTo.value = clampDate(dTo.value); }
 
   order = [...DATA].sort((a, b) =>
     (sessTotal(b.vscode) + sessTotal(b.cli) + sessTotal(b.claude)) - (sessTotal(a.vscode) + sessTotal(a.cli) + sessTotal(a.claude))
