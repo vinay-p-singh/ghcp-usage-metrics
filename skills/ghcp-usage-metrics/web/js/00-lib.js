@@ -50,6 +50,7 @@ function _arr(a) { return Array.isArray(a) ? a.filter(x => typeof x === "string"
 function normCfg(c) {
   c = (c && typeof c === "object") ? c : {};
   const ex = (c.exclude && typeof c.exclude === "object") ? c.exclude : {};
+  const rc = (c.reconcile && typeof c.reconcile === "object") ? c.reconcile : {};
   return {
     since: (typeof c.since === "string" && c.since) ? c.since : null,
     until: (typeof c.until === "string" && c.until) ? c.until : null,
@@ -58,6 +59,11 @@ function normCfg(c) {
     cost: { usdPerAiu: (c.cost && typeof c.cost.usdPerAiu === "number" && c.cost.usdPerAiu > 0) ? c.cost.usdPerAiu : null },
     hideEmptyProjects: (typeof c.hideEmptyProjects === "boolean") ? c.hideEmptyProjects : true,
     startAtCreditFloor: (typeof c.startAtCreditFloor === "boolean") ? c.startAtCreditFloor : true,
+    reconcile: {
+      cycleStart: (typeof rc.cycleStart === "string" && rc.cycleStart) ? rc.cycleStart : null,
+      cycleEnd: (typeof rc.cycleEnd === "string" && rc.cycleEnd) ? rc.cycleEnd : null,
+      officialAiu: (typeof rc.officialAiu === "number" && rc.officialAiu > 0) ? rc.officialAiu : null
+    },
     show: { diagnostics: (c.show && typeof c.show.diagnostics === "boolean") ? c.show.diagnostics : true },
     exclude: {
       projects: _arr(ex.projects), project_prefixes: _arr(ex.project_prefixes),
@@ -99,6 +105,48 @@ function windowSum(cl, from, to) {
 }
 
 function sessTotal(cl) { let s = 0; for (const k in cl.by_day) s += cl.by_day[k].sessions; return s; }
+
+// ---- reconciliation against GitHub's own figure ----
+// This tool measures a machine; GitHub bills an account. The two answer
+// different questions, so the gap between them is the finding -- never a
+// licence to adjust a recorded number to match. Ours should always be the
+// smaller of the two; the reverse means something here is double-counted.
+
+// Every recorded credit in the cycle, deliberately ignoring sidebar filters:
+// comparing a filtered subset against an account-wide total would overstate the
+// gap and invite exactly the wrong conclusion.
+function recordedInCycle(data, from, to) {
+  let aiu = 0, requests = 0;
+  for (const p of (data || [])) {
+    for (const k of CLIENT_KEYS) {
+      const w = windowSum(p[k], from, to);
+      aiu += w.aiu; requests += w.requests;
+    }
+  }
+  return { aiu, requests };
+}
+
+// UTC, because that is the clock every bucket is filed on (INV-34). Reading a
+// local date here would make the card disagree with the days it compares.
+function todayIso() { return new Date().toISOString().slice(0, 10); }
+
+// `today` is passed in rather than read from the clock so this stays a pure
+// function -- a stale card is a state worth testing, not one worth waiting for.
+function reconcileState(rc, ours, today) {
+  rc = rc || {};
+  if (!rc.cycleStart || !rc.cycleEnd || !rc.officialAiu) return { ready: false };
+  const gap = rc.officialAiu - ours.aiu;
+  return {
+    ready: true,
+    stale: !!(today && (today > rc.cycleEnd || today < rc.cycleStart)),
+    start: rc.cycleStart, end: rc.cycleEnd,
+    official: rc.officialAiu,
+    ours: ours.aiu, requests: ours.requests,
+    gap,
+    coverage: rc.officialAiu ? ours.aiu / rc.officialAiu : 0,
+    overcount: gap < 0
+  };
+}
 
 // Composite-key separator, matching AM_SEP on the Python side.
 const DIM_SEP = "\u001f";
@@ -426,5 +474,5 @@ if (typeof module !== "undefined" && module.exports) {
                      calBucket, CLIENT_ALIAS, arcPath, pieSegments, forecastFrom,
                      rankAgents, splitAgents, priciestPerRequest, BASE_AGENTS,
                      creditFloorStart, dayWarning, rankSessions, cacheSplit,
-                     sortSessions };
+                     sortSessions, recordedInCycle, reconcileState, todayIso };
 }

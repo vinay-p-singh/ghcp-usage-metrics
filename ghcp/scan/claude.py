@@ -17,6 +17,7 @@ from ghcp.constants import AGENT_CLAUDE, AM_SEP
 from ghcp.diagnostics import diag_err, src
 from ghcp.model import _add_day, _add_flat, _metrics
 from ghcp.naming import is_junk_cwd, project_name
+from ghcp.normalize import _any_date
 from ghcp.window import in_window
 
 
@@ -55,7 +56,7 @@ def scan_claude(claude_root: str) -> dict[str, dict]:
                         cwd = ev.get("cwd") or ""
                         if cwd and not is_junk_cwd(cwd):
                             name = project_name(cwd)
-                    date = str(ev.get("timestamp") or "")[:10]
+                    date = _any_date(ev.get("timestamp"))
                     if not date:
                         continue
                     u = msg.get("usage") or {}

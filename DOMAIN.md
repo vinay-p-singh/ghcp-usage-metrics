@@ -25,6 +25,8 @@ disagreement is recorded rather than hidden.
 | **Project** | The unit a reader cares about; the aggregate root | Identified by git remote slug, else folder leaf. `_canon` merges rows sharing a basename. |
 | **Request** | One recorded call to a model | The atomic fact. Everything else is a sum of these. |
 | **Session** | A distinct conversation containing requests | Unfiltered totals use every recorded session; model-filtered totals intersect activity facts with selected dates and models. |
+| **Day** | A **UTC** calendar day | Local midnight is not a boundary. Every harness normalises through `_any_date`, so a request at 19:00 UTC files under that UTC date even where the reader's clock already says tomorrow. |
+| **Machine scope** | This machine's harnesses, and nothing else | The unit of measurement is *this device*, not the account. GitHub bills the account. See [Known tensions](#the-tool-measures-a-machine-github-bills-an-account). |
 | **Measure** | A number that sums: requests, in, out, aiu, cached | Never estimated. Sessions are distinct entities, not an additive model measure. |
 | **Cached tokens** | Input that was served from the model's prompt cache | A *subset* of `in`, never an addition. 89.6% of all recorded input on this machine. |
 | **Miss tokens** | Input that was not served from cache: `in - cached` | Derived when displayed, never stored — storing both halves invites them to disagree. |
@@ -108,6 +110,7 @@ Status is either the test that enforces it, or `NOT ENFORCED`.
 | INV-31 | A session name exists only where a session store recorded one, capped at 120 characters, and never exceeds the sessions the harness counted | `test_invariants`, `test_snapshot_live` |
 | INV-32 | A retained chat session's tokens are read whether the source wrote them on the request or under `result.metadata` | `test_invariants` |
 | INV-33 | The coverage floor is the latest credit onset among reporting harnesses; a harness that never reports credits cannot hold it back, and no credits anywhere yields no floor rather than a guess | `test_quick_and_diagnostics`, `tests/js/qualify.test.js` |
+| INV-34 | Every harness buckets a request on its **UTC** day. A source timestamp is normalised through `_any_date`, never sliced as a raw string, so a local-midnight boundary cannot move a request between days | `test_invariants` |
 | INV-3 | No breakdown carries a session count; sessions are counted by distinct `by_sdm` key, never summed | `test_contract`, `test_invariants`, `test_extract_synthetic` |
 | INV-4 | Only declared composite dimensions use the separator, with exactly the declared number of parts | `test_contract` |
 | INV-5 | A project carries a name and exactly one record per harness, each with every dimension | `test_contract` |
@@ -134,6 +137,7 @@ Status is either the test that enforces it, or `NOT ENFORCED`.
 | INV-20 | Agents that recorded no credits keep their real request counts | `insights.test.js` |
 | INV-21 | The priciest-per-request ranking ignores agents below a minimum sample | `insights.test.js` |
 | INV-22 | A project name containing markup cannot inject HTML | `interaction.test.js` |
+| INV-35 | The reconciliation panel compares against an externally supplied figure and never alters a recorded total; when the current date falls outside the entered cycle it reports itself stale rather than comparing | `reconcile.test.js` |
 
 ### Structure
 
@@ -149,6 +153,31 @@ Status is either the test that enforces it, or `NOT ENFORCED`.
 ## Known tensions
 
 Recorded because each one has already caused a bug or is positioned to.
+
+### The tool measures a machine, GitHub bills an account
+
+Everything here is read from **this device's** local logs. GitHub's own
+"usage this cycle" counter is account-wide, so the two answer different
+questions and are not expected to be equal. Our figure should always be the
+smaller one; if it ever exceeds GitHub's, something is double-counted.
+
+The difference is made up of activity we cannot see by construction:
+
+- the same licence used on **another machine**
+- Copilot on **github.com** — chat, code review, PR summaries
+- the **coding agent** running server-side
+- mobile
+- spend after the most recent scan, including the session doing the scanning
+
+This is a deliberate limit, not a defect. A local-log reader cannot observe
+surfaces that never write to this disk, and no amount of parsing will change
+that. The reconciliation panel exists to make the gap **visible and
+attributable** rather than to close it — which is why it never adjusts a
+recorded number to match.
+
+Measured on 2026-08-05 against a stated 47,752 credits for the cycle opening
+2026-07-31: we accounted for 43,387 (90.9%), on a machine the reader confirmed
+was their only one.
 
 ### The coverage floor is a first-sighting rule, not a completeness rule
 

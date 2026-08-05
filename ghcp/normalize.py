@@ -13,14 +13,25 @@ def _utc_date_ms(ts: float) -> str:
 
 
 def _any_date(v) -> str | None:
-    """UTC date from an epoch-ms number or an ISO-8601 string; else None."""
+    """UTC date from an epoch-ms number or an ISO-8601 string; else None.
+
+    An offset-bearing string is converted rather than sliced: 2026-05-02T02:30+05:30
+    is the UTC day 2026-05-01, and slicing would file it a day late. A string
+    carrying no offset is sliced as written -- guessing a zone would be estimation.
+    """
     if isinstance(v, (int, float)):
         try:
             return _utc_date_ms(v)
         except Exception:
             return None
     if isinstance(v, str) and len(v) >= 10 and v[:4].isdigit():
-        return v[:10]
+        try:
+            dt = datetime.datetime.fromisoformat(v.replace("Z", "+00:00"))
+        except ValueError:
+            return v[:10]
+        if dt.tzinfo is None:
+            return v[:10]
+        return dt.astimezone(datetime.timezone.utc).strftime("%Y-%m-%d")
     return None
 
 

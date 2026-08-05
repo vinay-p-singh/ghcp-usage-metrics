@@ -15,6 +15,7 @@ import pytest
 import synthetic
 from ghcp.constants import NO_TOKEN
 from ghcp.naming import _canon
+from ghcp.normalize import _any_date
 
 
 @pytest.fixture(scope="module")
@@ -225,3 +226,31 @@ def test_retained_sessions_report_tokens_from_wherever_they_recorded_them(projec
     assert cell["in"] == 700, "metadata-only prompt tokens were read as zero"
     assert cell["out"] == 40, "metadata-only completion tokens were read as zero"
     assert cell["aiu"] == 1.5
+
+
+@pytest.mark.parametrize("value,expected", [
+    (synthetic.ms(2026, 5, 1, 19), "2026-05-01"),
+    ("2026-05-01T19:00:00Z", "2026-05-01"),
+    ("2026-05-02T00:30:00+05:30", "2026-05-01"),
+    ("2026-04-30T21:00:00-05:00", "2026-05-01"),
+    ("2026-05-01T19:00:00", "2026-05-01"),
+])
+def test_a_day_is_a_utc_day_whatever_clock_the_source_wrote(value, expected):
+    """INV-34. Harnesses disagree on how they stamp time: VS Code writes epoch
+    milliseconds, the CLI and Claude Code write ISO-8601 strings. All three go
+    through ``_any_date`` so the bucket is the UTC day in every case.
+
+    The offset cases are the ones that matter. Slicing the first ten characters
+    of ``2026-05-02T00:30:00+05:30`` yields 2026-05-02, which is a day late --
+    that was the behaviour before this rule was written down, and it was only
+    ever correct because every source happened to emit UTC.
+    """
+    assert _any_date(value) == expected
+
+
+def test_a_day_is_never_invented_when_the_source_gave_nothing_usable():
+    """INV-34, other half. Absent stays absent: an unparseable or missing stamp
+    yields None so the caller can skip the record, rather than a guessed date
+    that would silently move usage onto a day it did not happen."""
+    for junk in (None, "", "not-a-date", [], {}):
+        assert _any_date(junk) is None

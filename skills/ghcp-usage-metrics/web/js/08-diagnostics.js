@@ -8,6 +8,7 @@ const diagFloor = document.getElementById("diagFloor");
 const diagSources = document.getElementById("diagSources");
 const diagErrors = document.getElementById("diagErrors");
 const diagBadge = document.getElementById("diagBadge");
+const diagReconcile = document.getElementById("diagReconcile");
 const CLIENT_NAME = { vscode: "VS Code", cli: "Copilot CLI", claude: "Claude Code" };
 
 function diagPill(k, v, sub, cls) {
@@ -53,8 +54,60 @@ function renderCreditCoverage(cf) {
     `still be filling in.</p>`;
 }
 
+// The gap between this machine and GitHub's account-wide counter is the point
+// of this card. It is never closed by adjusting a recorded number -- it is
+// named, so a reader can see which surface they are not measuring.
+const RECONCILE_CAUSES = [
+  ["The same licence on another machine", "logs live on the device that made the request, so a second machine is invisible here"],
+  ["Copilot on github.com", "chat, code review and PR summaries never touch this disk"],
+  ["The coding agent", "runs server-side; nothing is written locally"],
+  ["Mobile", "same reason"],
+  ["Spend since the last scan", "including the session you are reading this in"]
+];
+
+function renderReconcile() {
+  if (!diagReconcile) return;
+  const rc = CFG.reconcile || {};
+  const ours = (rc.cycleStart && rc.cycleEnd)
+    ? recordedInCycle(DATA, rc.cycleStart, rc.cycleEnd)
+    : { aiu: 0, requests: 0 };
+  const st = reconcileState(rc, ours, todayIso());
+  if (!st.ready) {
+    diagReconcile.innerHTML =
+      '<p class="diag-reason">Not set up. Open <b>Config</b> and enter your billing cycle ' +
+      'dates plus the credits figure from your GitHub Copilot settings page, and this ' +
+      'card will show the two side by side.</p>';
+    return;
+  }
+  const pct = Math.round(st.coverage * 1000) / 10;
+  const cards =
+    diagPill("GitHub reports", fmtAiu(st.official), "for " + esc(st.start) + " \u2192 " + esc(st.end)) +
+    diagPill("This machine recorded", fmtAiu(st.ours), fmt(st.requests) + " requests") +
+    diagPill(st.overcount ? "Over by" : "Not accounted for", fmtAiu(Math.abs(st.gap)),
+             pct + "% accounted for", st.overcount ? "diag-bad" : "diag-warn");
+  const causes = st.overcount
+    ? '<p class="diag-reason"><b>This is a bug, not a gap.</b> Our total cannot legitimately ' +
+      'exceed GitHub&rsquo;s, because we can only ever see a subset of what it bills. Check for ' +
+      'a session counted from two sources, or a subagent attributed twice.</p>'
+    : '<p class="diag-reason">The difference is activity this tool cannot observe by ' +
+      'construction &mdash; not an error in the figures above:</p><ul class="diag-limits">' +
+      RECONCILE_CAUSES.map(([k, v]) => `<li><b>${esc(k)}</b> &mdash; ${esc(v)}</li>`).join("") +
+      '</ul>';
+  const stale = st.stale
+    ? '<p class="diag-reason">\u26a0 <b>Today falls outside this cycle.</b> The figure you entered ' +
+      'belongs to a cycle that has closed, so this comparison is out of date &mdash; update it in ' +
+      'Config against the current cycle before reading anything into the gap.</p>'
+    : "";
+  diagReconcile.innerHTML =
+    stale + `<div class="pills">${cards}</div>` + causes +
+    '<p class="diag-reason">Both sides are shown as recorded. Nothing on this page is ' +
+    'scaled up to meet GitHub&rsquo;s number, and the cycle dates are read as UTC days &mdash; ' +
+    'the same clock the scan buckets on.</p>';
+}
+
 function renderDiagnostics() {
   if (!diagPills) return;
+  renderReconcile();
   const d = DIAG || {};
   const srcs = d.sources || {};
   const cov = d.coverage || {};

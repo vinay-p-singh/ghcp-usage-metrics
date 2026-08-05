@@ -4,6 +4,34 @@ Releases are recorded here from 1.0.0 onward. The development that led up to it
 is summarised at the end, as phases rather than versions — those builds never
 shipped to anyone, and listing them as releases would overstate what happened.
 
+## [1.2.0] — 2026-08-05
+
+Puts this tool's total beside GitHub's own, and names what the difference is
+made of instead of leaving a reader to assume one side is wrong.
+
+Added
+
+- **Reconciliation card** in Diagnostics. Enter your billing cycle dates and the
+  credits figure from your GitHub Copilot settings page, and the card shows both
+  totals side by side with the share accounted for. The gap is explained rather
+  than closed: a second machine, Copilot on github.com, the coding agent, mobile,
+  and spend since the last scan are all invisible to a tool that reads local
+  logs. Nothing is scaled up to meet GitHub's number.
+- The card compares against every recorded credit in the cycle, deliberately
+  ignoring the sidebar filters — a filtered subset measured against an
+  account-wide total would overstate the gap.
+- Our total exceeding GitHub's is reported as a bug in this tool, not a gap,
+  because we can only ever see a subset of what GitHub bills.
+- A staleness warning when today falls outside the cycle you entered, so a
+  closed cycle is not read as a current one.
+
+Fixed
+
+- Timestamps carrying a UTC offset were sliced to their first ten characters,
+  which filed a request on the wrong day whenever the local date and the UTC
+  date differed. They are now converted. A timestamp with no offset is still
+  read as written — guessing a zone would be estimation.
+
 ## [1.1.0] — 2026-08-03
 
 Answers a question the previous release could not: what did one piece of work

@@ -296,6 +296,10 @@
         <p class="provenance">Treat this as a complete picture of what your machine still remembers, and a floor rather than a bill.</p>
       </div>
       <div class="panel">
+        <h3>Against GitHub&rsquo;s figure <span class="hint">&mdash; what this machine recorded for a billing cycle, beside what GitHub reports for the same one. Set the cycle in Config.</span></h3>
+        <div id="diagReconcile"></div>
+      </div>
+      <div class="panel">
         <h3>Scan health <span class="hint">&mdash; what the last scan actually read, skipped and failed on. Nothing here is swallowed silently.</span></h3>
         <div class="pills" id="diagPills"></div>
       </div>
@@ -355,6 +359,18 @@
       <label>Monthly budget (AIU)
         <input type="number" id="qsBudget" min="0" step="1" placeholder="not set">
         <span class="cfg-hint">Drives the Forecast tab's over/under comparison.</span>
+      </label>
+      <label>Billing cycle start
+        <input type="date" id="qsCycleStart">
+        <span class="cfg-hint">The first day of the cycle GitHub is counting. Its Copilot settings page states when the cycle resets &mdash; the day after the reset date is the next cycle's start, so a reset on the 31st means a cycle opening on the 31st of the previous month.</span>
+      </label>
+      <label>Billing cycle end
+        <input type="date" id="qsCycleEnd">
+        <span class="cfg-hint">The last day of that cycle, i.e. the day before it resets.</span>
+      </label>
+      <label>GitHub&rsquo;s credits this cycle
+        <input type="number" id="qsOfficial" min="0" step="1" placeholder="not set">
+        <span class="cfg-hint">Type the number shown on your Copilot settings page. It is never used to change a recorded figure &mdash; only to show the difference and name what it is made of. Dates are read as UTC days, the same clock the scan buckets on.</span>
       </label>
       <label>Auto-refresh (minutes)
         <input type="number" id="qsAuto" min="0" step="1">

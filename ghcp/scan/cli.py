@@ -16,6 +16,7 @@ from ghcp.constants import AGENT_CLI, AM_SEP, NO_TOKEN
 from ghcp.diagnostics import diag_err, src
 from ghcp.model import _add_day, _add_flat, _metrics, name_session
 from ghcp.naming import is_junk_cwd, project_name, repo_slug
+from ghcp.normalize import _any_date
 
 
 def scan_cli(cli_home: str) -> dict[str, dict]:
@@ -46,8 +47,9 @@ def scan_cli(cli_home: str) -> dict[str, dict]:
             if name:
                 sid_project[sid] = name
                 name_session(out[name], sid, summary)
-                if created:
-                    _add_day(out[name], str(created)[:10], sessions=1)
+                created_day = _any_date(created)
+                if created_day:
+                    _add_day(out[name], created_day, sessions=1)
 
         # Cache columns arrived with a later CLI release. When they are absent we
         # record no cache figure at all rather than a zero we did not measure.
@@ -64,15 +66,15 @@ def scan_cli(cli_home: str) -> dict[str, dict]:
                 "model, created_at, " + cache_cols + " FROM assistant_usage_events"):
             have_usage.add(sid)
             name = sid_project.get(sid)
-            if not name or not created:
+            day = _any_date(created)
+            if not name or not day:
                 continue
-            cli_real_days.add(str(created)[:10])
+            cli_real_days.add(day)
             aiu = (nano or 0) / 1e9
             if not model:
                 raise ValueError(f"CLI usage event {sid} carries tokens but no model")
             cached = (c_read or 0) + (c_write or 0)
             cached_req = 1 if has_cache else 0
-            day = str(created)[:10]
             _add_day(out[name], day, requests=1, in_=inp or 0, out=outp or 0,
                      aiu=aiu, cached=cached, cached_req=cached_req)
             for bucket, key in ((out[name]["by_model"], model),
@@ -92,9 +94,9 @@ def scan_cli(cli_home: str) -> dict[str, dict]:
             if sid in have_usage:
                 continue
             name = sid_project.get(sid)
-            if not name or not ts:
+            date = _any_date(ts)
+            if not name or not date:
                 continue
-            date = str(ts)[:10]
             if date in cli_real_days:
                 continue
             _add_day(out[name], date, requests=1)

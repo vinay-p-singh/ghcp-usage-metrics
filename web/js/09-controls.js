@@ -91,6 +91,9 @@ const qs = {
   until: document.getElementById("qsUntil"),
   cost: document.getElementById("qsCost"),
   budget: document.getElementById("qsBudget"),
+  cycleStart: document.getElementById("qsCycleStart"),
+  cycleEnd: document.getElementById("qsCycleEnd"),
+  official: document.getElementById("qsOfficial"),
   auto: document.getElementById("qsAuto"),
   hideEmpty: document.getElementById("qsHideEmpty"),
   diag: document.getElementById("qsDiag"),
@@ -103,6 +106,9 @@ function syncQuickSettings() {
   qs.until.value = CFG.until || "";
   qs.cost.value = (CFG.cost && CFG.cost.usdPerAiu) || "";
   qs.budget.value = (CFG.budget && CFG.budget.monthlyAiu) || "";
+  qs.cycleStart.value = (CFG.reconcile && CFG.reconcile.cycleStart) || "";
+  qs.cycleEnd.value = (CFG.reconcile && CFG.reconcile.cycleEnd) || "";
+  qs.official.value = (CFG.reconcile && CFG.reconcile.officialAiu) || "";
   qs.auto.value = CFG.autoRefreshMinutes || 0;
   qs.hideEmpty.checked = hideEmptyOn();
   qs.diag.checked = diagnosticsOn();
@@ -131,6 +137,11 @@ document.getElementById("qsApply").addEventListener("click", () => {
     until: qs.until.value || null,
     cost: { usdPerAiu: num(qs.cost) },
     budget: { monthlyAiu: num(qs.budget) },
+    reconcile: {
+      cycleStart: qs.cycleStart.value || null,
+      cycleEnd: qs.cycleEnd.value || null,
+      officialAiu: num(qs.official)
+    },
     autoRefreshMinutes: Math.max(0, parseFloat(qs.auto.value) || 0),
     hideEmptyProjects: qs.hideEmpty.checked,
     show: { diagnostics: qs.diag.checked },
