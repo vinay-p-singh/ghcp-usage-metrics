@@ -4,6 +4,29 @@ Releases are recorded here from 1.0.0 onward. The development that led up to it
 is summarised at the end, as phases rather than versions — those builds never
 shipped to anyone, and listing them as releases would overstate what happened.
 
+## [1.2.1] — 2026-08-05
+
+A scan that hits one unreadable file no longer takes the whole report with it,
+and a failure that does happen is reported as a sentence rather than a wall of
+Python.
+
+Fixed
+
+- One bad session, chat file, workspace or log source used to abort the entire
+  scan, so a single oddity on a machine left the reader with no dashboard at
+  all. Each of those is now contained: the failure is recorded in the
+  Diagnostics tab, that one unit is skipped, and everything else still reports.
+
+Changed
+
+- Failure notifications carry one line — what failed and why — instead of the
+  raw traceback. **Show details** opens the full record in the output panel and
+  **Open report file** opens it as a file to attach to a bug report.
+- A run that dies writes `out/error.log`: the traceback, the platform and
+  Python version it ran on, what the scan had already read, and every contained
+  failure. A successful run deletes it, so its presence always means the last
+  run failed.
+
 ## [1.2.0] — 2026-08-05
 
 Puts this tool's total beside GitHub's own, and names what the difference is

@@ -25,7 +25,7 @@ from collections import defaultdict
 from ghcp.billing import (apply_billing, billing_or_defer, load_cache, prewarm,
                           save_cache)
 from ghcp.constants import AGENT_DEFAULT, AM_SEP, NO_TOKEN, RUNSUBAGENT_PREFIX
-from ghcp.diagnostics import diag_err, src
+from ghcp.diagnostics import diag_err, guarded, src
 from ghcp.jsonl import _langs_from_response, _reconstruct_jsonl
 from ghcp.model import _add_day, _add_flat, _metrics, name_session
 from ghcp.naming import project_name, repo_slug, uri_to_path
@@ -288,14 +288,15 @@ def _scan_workspace(vs_root: str, h: str, fallback: str, out: dict, cache: dict,
                 continue
             hash_dbg.add(e.name)
             seen_sids.add(e.name)
-            m = out[sid_repo.get(e.name, fallback)]
-            agent = sid_agent.get(e.name, AGENT_DEFAULT)
-            name_session(m, e.name, sid_summary.get(e.name))
-            rec, totals = _scan_session_dir(e, m, agent, cache)
-            _attribute_skills(m, sid_skills.get(e.name), totals)
-            main_by_day = rec.get("by_day", {})
-            sdate = min(main_by_day) if main_by_day else _date_of_path(e.path)
-            _add_day(m, sdate, sessions=1)
+            with guarded("vscode_debug", e.path):
+                m = out[sid_repo.get(e.name, fallback)]
+                agent = sid_agent.get(e.name, AGENT_DEFAULT)
+                name_session(m, e.name, sid_summary.get(e.name))
+                rec, totals = _scan_session_dir(e, m, agent, cache)
+                _attribute_skills(m, sid_skills.get(e.name), totals)
+                main_by_day = rec.get("by_day", {})
+                sdate = min(main_by_day) if main_by_day else _date_of_path(e.path)
+                _add_day(m, sdate, sessions=1)
 
     # chatSessions: retained (request-trimmed) sessions extend history back
     # further than the rotated debug-logs and carry real copilotCredits,
@@ -310,9 +311,10 @@ def _scan_workspace(vs_root: str, h: str, fallback: str, out: dict, cache: dict,
         if not in_window(cf):
             cs["files_deferred"] += 1
             continue
-        if scan_chat_file(cf, out, sid_repo, sid_agent, sid_skills,
-                          seen_sids, fallback, hash_dbg, sid_summary):
-            cs["files_parsed"] += 1
+        with guarded("vscode_chat", cf):
+            if scan_chat_file(cf, out, sid_repo, sid_agent, sid_skills,
+                              seen_sids, fallback, hash_dbg, sid_summary):
+                cs["files_parsed"] += 1
 
 
 def scan_vscode_root(vs_root: str, vs_db: str, out: dict, cache: dict,
@@ -334,7 +336,8 @@ def scan_vscode_root(vs_root: str, vs_db: str, out: dict, cache: dict,
         src("vscode_ws")["files_parsed"] += 1
         folder = uri_to_path(d.get("folder") or d.get("workspace") or "")
         fallback = project_name(folder) if folder else "(no folder)"
-        _scan_workspace(vs_root, h, fallback, out, cache, maps, seen_sids)
+        with guarded("vscode_ws", wj):
+            _scan_workspace(vs_root, h, fallback, out, cache, maps, seen_sids)
 
     # Orphan skill reads: SKILL.md invocations logged in session_files for
     # sessions whose bodies were fully purged (no debug-log AND no chatSessions
@@ -368,6 +371,7 @@ def scan_vscode(variants: list[tuple[str, str]], cache_path: str) -> dict[str, d
     seen_sids: set[str] = set()
     for vs_root, vs_db in variants:
         if os.path.isdir(vs_root):
-            scan_vscode_root(vs_root, vs_db, out, cache, seen_sids)
+            with guarded("vscode_debug", vs_root):
+                scan_vscode_root(vs_root, vs_db, out, cache, seen_sids)
     save_cache(cache_path, cache)
     return out

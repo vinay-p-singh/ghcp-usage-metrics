@@ -23,8 +23,9 @@ import json
 import os
 import sys
 import time
+import traceback
 
-from ghcp.diagnostics import DIAG, coverage, credit_floor, diag_reset
+from ghcp.diagnostics import DIAG, coverage, credit_floor, diag_reset, guarded
 from ghcp.model import build_projects
 from ghcp.report import write_dashboard as _write_dashboard
 from ghcp.scan.claude import scan_claude as _scan_claude
@@ -181,6 +182,43 @@ def _totals(projects: list[dict]) -> tuple[int, int, int, float, int]:
     return len(projects), sess, req, aiu, len(days)
 
 
+def error_log() -> str:
+    """Where a fatal run writes itself down. Read at call time, like the scan paths."""
+    return os.path.join(OUT, "error.log")
+
+
+def _write_error_log(exc: BaseException, argv: list[str]) -> str | None:
+    """Record a fatal run in full, in one file a user can hand back.
+
+    The notification only gets a sentence, so this is the only place the detail
+    survives: the traceback, the machine it happened on, and what the scan had
+    already seen when it died -- which is usually what identifies the file that
+    caused it. Returns the path, or None when even this could not be written.
+    """
+    path = error_log()
+    try:
+        os.makedirs(OUT, exist_ok=True)
+        seen = {k: DIAG.get(k) for k in ("generated", "mode", "quick_days", "elapsed")}
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("GHCP Usage Metrics \u2014 error report\n")
+            fh.write("Share this file to get the failure fixed.\n\n")
+            fh.write(f"platform: {sys.platform}\n")
+            fh.write(f"python:   {sys.version.split()[0]}\n")
+            fh.write(f"argv:     {argv}\n")
+            fh.write(f"extractor: {os.path.abspath(__file__)}\n\n")
+            fh.write("--- traceback ---\n")
+            fh.write("".join(traceback.format_exception(
+                type(exc), exc, exc.__traceback__)))
+            fh.write("\n--- run so far ---\n")
+            fh.write(json.dumps(seen, indent=2, default=str) + "\n")
+            fh.write(json.dumps(DIAG.get("sources", {}), indent=2, default=str) + "\n")
+            fh.write("\n--- contained failures ---\n")
+            fh.write(json.dumps(DIAG.get("errors", []), indent=2, default=str) + "\n")
+        return path
+    except OSError:
+        return None
+
+
 def main() -> None:
     argv = sys.argv[1:]
     if "--diagnostics" in argv:
@@ -190,9 +228,14 @@ def main() -> None:
     set_quick_window(_quick_days(argv))
 
     results = {}
-    for key, fn in (("vscode", scan_vscode), ("cli", scan_cli), ("claude", scan_claude)):
+    for key, source, fn in (("vscode", "vscode_debug", scan_vscode),
+                            ("cli", "cli", scan_cli),
+                            ("claude", "claude", scan_claude)):
         t0 = time.time()
-        results[key] = fn()
+        results[key] = {}
+        # One surface being unreadable must not cost the other two their report.
+        with guarded(source, f"scan_{key}"):
+            results[key] = fn()
         DIAG["elapsed"][key] = round(time.time() - t0, 2)
     projects = build_projects(results["vscode"], results["cli"], results["claude"])
     coverage(projects)
@@ -218,5 +261,33 @@ def main() -> None:
     print("dashboard -> out/dashboard.html   data -> out/projects.json")
 
 
+def cli(argv: list[str] | None = None) -> int:
+    """Run the extractor, keeping any failure short on screen and complete on disk.
+
+    A traceback pasted into a notification tells a user nothing they can act on
+    and hides the one line that matters. So the caller gets three lines and a
+    path, and the path holds everything.
+    """
+    stale = error_log()
+    if os.path.isfile(stale):
+        try:
+            os.remove(stale)
+        except OSError:
+            pass
+    try:
+        main()
+    except Exception as exc:  # noqa: BLE001 - top level: report, never re-raise
+        path = _write_error_log(exc, argv if argv is not None else sys.argv[1:])
+        reason = f"{type(exc).__name__}: {exc}".splitlines()[0][:200]
+        print("GHCP Usage: the scan could not finish.", file=sys.stderr)
+        print(f"reason: {reason}", file=sys.stderr)
+        if path:
+            print(f"details: {path}", file=sys.stderr)
+        else:
+            print("details: could not be written to disk", file=sys.stderr)
+        return 1
+    return 0
+
+
 if __name__ == "__main__":
-    main()
+    sys.exit(cli())

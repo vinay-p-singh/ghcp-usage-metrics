@@ -7,6 +7,9 @@ showing AI Units (AIU), requests, tokens, projects, models, agents, and skills.
 Nothing leaves your machine, and nothing is estimated — only values GitHub
 actually recorded are shown.
 
+To install the VS Code extension or the chat skill, see
+[INSTALL.md](INSTALL.md).
+
 ## What it looks at
 
 Copilot leaves a trail in a few local places. The extractor reads three

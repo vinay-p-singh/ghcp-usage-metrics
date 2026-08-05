@@ -10,6 +10,7 @@ seeing the live record.
 """
 from __future__ import annotations
 
+import contextlib
 import datetime
 import sys
 
@@ -75,6 +76,21 @@ def diag_err(source: str, path: str, exc: object) -> None:
     if len(errs) < ERR_CAP:
         errs.append({"source": source, "path": path,
                      "error": f"{type(exc).__name__}: {exc}"[:300]})
+
+
+@contextlib.contextmanager
+def guarded(source: str, path: str):
+    """Contain one unit of the scan: a session, a file, a workspace, a scanner.
+
+    These logs are written by software we do not control, on machines we cannot
+    inspect. One of them being unreadable or shaped unexpectedly must cost that
+    one unit, not the whole report -- so the failure is recorded where the
+    Diagnostics tab will show it, and the scan moves on.
+    """
+    try:
+        yield
+    except Exception as exc:  # noqa: BLE001 - deliberate: contain, record, continue
+        diag_err(source, path, exc)
 
 
 def coverage(projects: list[dict]) -> None:

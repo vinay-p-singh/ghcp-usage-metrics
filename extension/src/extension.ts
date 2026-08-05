@@ -62,7 +62,7 @@ async function runDiagnostics(context: vscode.ExtensionContext): Promise<void> {
     );
     info = JSON.parse(raw) as DiagInfo;
   } catch (e: unknown) {
-    vscode.window.showErrorMessage("GHCP Usage diagnostics failed: " + errMsg(e));
+    await reportFailure(root, "diagnostics could not be collected", e);
     return;
   }
   const ch = (diagChannel ??= vscode.window.createOutputChannel("GHCP Usage"));
@@ -304,7 +304,7 @@ async function safeRefresh(root: string): Promise<void> {
   try {
     await refreshInto(root);
   } catch (e: unknown) {
-    vscode.window.showErrorMessage("GHCP Usage refresh failed: " + errMsg(e));
+    await reportFailure(root, "the refresh could not finish", e);
   }
 }
 
@@ -390,7 +390,7 @@ async function openDashboard(context: vscode.ExtensionContext): Promise<void> {
       );
       setHtml(panel, loadReport(root, panel.webview));
     } catch (e: unknown) {
-      vscode.window.showErrorMessage("GHCP Usage scan failed: " + errMsg(e));
+      await reportFailure(root, "the first scan could not finish", e);
     }
   }
   await safeRefresh(root);
@@ -401,4 +401,59 @@ function errMsg(e: unknown): string {
     return e.message;
   }
   return String(e);
+}
+
+// usage.py writes the full traceback here when a run dies; it deletes the file
+// at the start of every run, so its presence means "the last run failed".
+function errorLogPath(root: string): string {
+  return path.join(root, "out", "error.log");
+}
+
+// A notification is one line of reading. A pasted traceback is neither
+// actionable nor readable, and it buries the line that identifies the fault.
+function shortMsg(e: unknown): string {
+  const lines = errMsg(e)
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  // usage.py labels its own summary; anything else reaching here is a raw
+  // traceback (Python failed before our handler), whose last line is the cause.
+  const labelled = lines.find((l) => l.startsWith("reason:"));
+  const raw = lines.some((l) => l.startsWith("Traceback (")) ? lines[lines.length - 1] : lines[0];
+  const text = (labelled ?? raw ?? "unknown error").replace(/^reason:\s*/, "");
+  return text.length > 140 ? text.slice(0, 139) + "\u2026" : text;
+}
+
+// Short on screen, complete on disk, and one click from being shareable.
+async function reportFailure(root: string | undefined, what: string, e: unknown): Promise<void> {
+  const log = root ? errorLogPath(root) : undefined;
+  const hasLog = !!log && fs.existsSync(log);
+  const actions = hasLog ? ["Show details", "Open report file"] : ["Show details"];
+  const pick = await vscode.window.showErrorMessage(
+    `GHCP Usage: ${what} \u2014 ${shortMsg(e)}`,
+    ...actions
+  );
+  if (pick === "Open report file" && log) {
+    await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(log));
+    return;
+  }
+  if (pick !== "Show details") {
+    return;
+  }
+  const ch = (diagChannel ??= vscode.window.createOutputChannel("GHCP Usage"));
+  ch.clear();
+  ch.appendLine(`GHCP Usage \u2014 ${what}`);
+  ch.appendLine("");
+  ch.appendLine(errMsg(e).trim());
+  if (hasLog && log) {
+    ch.appendLine("");
+    ch.appendLine(`--- ${log} ---`);
+    try {
+      ch.appendLine(fs.readFileSync(log, "utf8"));
+    } catch (readErr: unknown) {
+      ch.appendLine(`(could not be read: ${errMsg(readErr)})`);
+    }
+    ch.appendLine("Attach that file to a bug report \u2014 it holds the full traceback.");
+  }
+  ch.show(true);
 }
