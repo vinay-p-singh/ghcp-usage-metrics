@@ -1,9 +1,9 @@
 {
   "name": "ghcp-usage-metrics",
-  "displayName": "GHCP Usage Metrics",
-  "description": "Local dashboard of your GitHub Copilot token & AI-credit (AIU) usage per project, model, harness, agent, skill and day, with cost ranking, strengths and forecasting. Runs the bundled Python extractor (usage.py) and hosts its report in a webview. Refresh re-scans your logs live. Nothing leaves your machine.",
+  "displayName": "Copilot Usage & AIU Metrics (unofficial)",
+  "description": "Local dashboard of your GitHub Copilot token & AI-credit (AIU) usage per project, model, harness, agent, skill and day, with cost ranking, strengths and forecasting. Runs the bundled Python extractor (usage.py) and hosts its report in a webview. Refresh re-scans your logs live. Nothing leaves your machine. Not affiliated with, endorsed by, or supported by Microsoft or GitHub.",
   "version": "1.3.0",
-  "publisher": "local",
+  "publisher": "vinay-p-singh",
   "license": "MIT",
   "icon": "media/icon.png",
   "repository": {
@@ -27,26 +27,35 @@
     "metrics",
     "tokens",
     "aiu",
-    "dashboard"
+    "dashboard",
+    "ai units",
+    "token usage",
+    "cost tracking",
+    "telemetry-free"
   ],
+  "galleryBanner": {
+    "color": "#1f1f1f",
+    "theme": "dark"
+  },
+  "pricing": "Free",
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
         "command": "ghcpUsage.openDashboard",
-        "title": "GHCP Usage: Open Dashboard"
+        "title": "Copilot Usage: Open Dashboard"
       },
       {
         "command": "ghcpUsage.refresh",
-        "title": "GHCP Usage: Refresh Data"
+        "title": "Copilot Usage: Refresh Data"
       },
       {
         "command": "ghcpUsage.diagnostics",
-        "title": "GHCP Usage: Diagnostics"
+        "title": "Copilot Usage: Diagnostics"
       }
     ],
     "configuration": {
-      "title": "GHCP Usage Metrics",
+      "title": "Copilot Usage & AIU Metrics",
       "properties": {
         "ghcpUsage.pythonPath": {
           "type": "string",

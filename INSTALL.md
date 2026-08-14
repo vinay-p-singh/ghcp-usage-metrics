@@ -56,7 +56,7 @@ code --install-extension path\to\ghcp-usage-metrics-1.2.1.vsix
 
 ### Step 3 — open the dashboard
 
-Press `Ctrl+Shift+P`, run **GHCP Usage: Open Dashboard**.
+Press `Ctrl+Shift+P`, run **Copilot Usage: Open Dashboard**.
 
 The first scan takes a little while — it is reading every Copilot log on the
 machine. Later opens paint the previous report instantly and refresh behind it.
@@ -75,7 +75,7 @@ Installing a newer `.vsix` over an older one leaves the old folder on disk, and
 after a downgrade VS Code can load the wrong one. Uninstall first:
 
 ```pwsh
-code --uninstall-extension local.ghcp-usage-metrics
+code --uninstall-extension vinay-p-singh.ghcp-usage-metrics
 code --install-extension path\to\ghcp-usage-metrics-<new version>.vsix
 ```
 
@@ -142,7 +142,7 @@ the detail:
   platform and Python version, and what the scan had already read. A successful
   run deletes that file, so if it exists, the last run failed. Attach it to a bug
   report.
-- **GHCP Usage: Diagnostics** from the Command Palette reports what the extractor
+- **Copilot Usage: Diagnostics** from the Command Palette reports what the extractor
   can actually see on this machine.
 - The dashboard's **Diagnostics** tab lists every file the scan skipped and why.
   A single unreadable log is skipped rather than failing the whole scan, so this

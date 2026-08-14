@@ -1,4 +1,4 @@
-// GHCP Usage Metrics — VS Code extension entry point.
+// Copilot Usage & AIU Metrics — VS Code extension entry point.
 //
 // Architecture: the Python extractor (usage.py) remains the single source of
 // truth. This extension does NOT re-implement extraction. It runs
@@ -44,20 +44,20 @@ async function runDiagnostics(context: vscode.ExtensionContext): Promise<void> {
   const root = findRepoRoot(context);
   if (!root) {
     vscode.window.showErrorMessage(
-      "GHCP Usage: could not find usage.py. Open the ghcp-usage-metrics folder, " +
+      "Copilot Usage: could not find usage.py. Open the ghcp-usage-metrics folder, " +
         "or set ghcpUsage.repoPath to the folder that contains usage.py."
     );
     return;
   }
   const py = setting<string>("pythonPath", "python");
   if (!(await pythonOk(py))) {
-    vscode.window.showErrorMessage(`GHCP Usage: Python not found (tried "${py}").`);
+    vscode.window.showErrorMessage(`Copilot Usage: Python not found (tried "${py}").`);
     return;
   }
   let info: DiagInfo;
   try {
     const raw = await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: "GHCP Usage: collecting diagnostics\u2026" },
+      { location: vscode.ProgressLocation.Notification, title: "Copilot Usage: collecting diagnostics\u2026" },
       () => runCapture(py, root, ["usage.py", "--diagnostics"])
     );
     info = JSON.parse(raw) as DiagInfo;
@@ -65,9 +65,9 @@ async function runDiagnostics(context: vscode.ExtensionContext): Promise<void> {
     await reportFailure(root, "diagnostics could not be collected", e);
     return;
   }
-  const ch = (diagChannel ??= vscode.window.createOutputChannel("GHCP Usage"));
+  const ch = (diagChannel ??= vscode.window.createOutputChannel("Copilot Usage"));
   ch.clear();
-  ch.appendLine("GHCP Usage \u2014 Diagnostics");
+  ch.appendLine("Copilot Usage \u2014 Diagnostics");
   ch.appendLine("");
   ch.appendLine(`APPDATA: ${info.appdata}`);
   ch.appendLine(`VS Code variants found: ${(info.vscode_variants ?? []).join(", ") || "none"}`);
@@ -100,10 +100,10 @@ async function runDiagnostics(context: vscode.ExtensionContext): Promise<void> {
   }
   ch.show(true);
   vscode.window.showInformationMessage(
-    "GHCP Usage diagnostics: " +
+    "Copilot Usage diagnostics: " +
       (info.has_token_data
         ? `token data found (${info.main_jsonl_with_tokens} logs + ${info.chat_files_with_tokens} sessions).`
-        : "no token/AIU data retained locally \u2014 see the GHCP Usage output for why.")
+        : "no token/AIU data retained locally \u2014 see the Copilot Usage output for why.")
   );
 }
 
@@ -291,7 +291,7 @@ function setHtml(target: vscode.WebviewPanel, html: string): void {
 
 async function refreshInto(root: string): Promise<void> {
   await vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Window, title: "GHCP Usage: scanning Copilot logs…" },
+    { location: vscode.ProgressLocation.Window, title: "Copilot Usage: scanning Copilot logs…" },
     async () => runExtractor(root)
   );
   sendReport(root, "full");
@@ -312,7 +312,7 @@ async function openDashboard(context: vscode.ExtensionContext): Promise<void> {
   const root = findRepoRoot(context);
   if (!root) {
     vscode.window.showErrorMessage(
-      "GHCP Usage: could not find usage.py. Open the ghcp-usage-metrics folder, " +
+      "Copilot Usage: could not find usage.py. Open the ghcp-usage-metrics folder, " +
         "or set ghcpUsage.repoPath to the folder that contains usage.py."
     );
     return;
@@ -321,7 +321,7 @@ async function openDashboard(context: vscode.ExtensionContext): Promise<void> {
   const py = setting<string>("pythonPath", "python");
   if (!(await pythonOk(py))) {
     const pick = await vscode.window.showErrorMessage(
-      `GHCP Usage: Python not found (tried "${py}"). This extension needs ` +
+      `Copilot Usage: Python not found (tried "${py}"). This extension needs ` +
         "Python 3.8+ on your PATH to scan your Copilot logs (no pip packages required).",
       "Open Settings"
     );
@@ -384,7 +384,7 @@ async function openDashboard(context: vscode.ExtensionContext): Promise<void> {
       await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Window,
-          title: `GHCP Usage: scanning the last ${days} days\u2026`
+          title: `Copilot Usage: scanning the last ${days} days\u2026`
         },
         () => runExtractor(root, ["--quick", String(days)])
       );
@@ -430,7 +430,7 @@ async function reportFailure(root: string | undefined, what: string, e: unknown)
   const hasLog = !!log && fs.existsSync(log);
   const actions = hasLog ? ["Show details", "Open report file"] : ["Show details"];
   const pick = await vscode.window.showErrorMessage(
-    `GHCP Usage: ${what} \u2014 ${shortMsg(e)}`,
+    `Copilot Usage: ${what} \u2014 ${shortMsg(e)}`,
     ...actions
   );
   if (pick === "Open report file" && log) {
@@ -440,9 +440,9 @@ async function reportFailure(root: string | undefined, what: string, e: unknown)
   if (pick !== "Show details") {
     return;
   }
-  const ch = (diagChannel ??= vscode.window.createOutputChannel("GHCP Usage"));
+  const ch = (diagChannel ??= vscode.window.createOutputChannel("Copilot Usage"));
   ch.clear();
-  ch.appendLine(`GHCP Usage \u2014 ${what}`);
+  ch.appendLine(`Copilot Usage \u2014 ${what}`);
   ch.appendLine("");
   ch.appendLine(errMsg(e).trim());
   if (hasLog && log) {

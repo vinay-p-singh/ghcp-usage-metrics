@@ -28,6 +28,15 @@ Changed
   the session touched would have reported more reads than happened. Credits for
   that skill still split by day; only the read count is anchored.
 
+Renamed
+
+- The extension is listed as **Copilot Usage & AIU Metrics (unofficial)** and
+  published under the `vinay-p-singh` publisher. "GHCP" is internal shorthand
+  that nobody would search for. The palette entries and notifications now read
+  *Copilot Usage:* to match.
+- Command IDs and settings keys keep the `ghcpUsage.` prefix. Renaming them
+  would silently discard any settings already saved, and buys nothing.
+
 ## [1.2.1] — 2026-08-05
 
 A scan that hits one unreadable file no longer takes the whole report with it,

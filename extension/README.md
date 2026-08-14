@@ -11,7 +11,7 @@ truth. The extension:
 1. runs `python usage.py` (writes `out/dashboard.html`),
 2. loads that self-contained report into a webview,
 3. re-runs the extractor when you click **Refresh data** (or run
-   *GHCP Usage: Refresh Data*), then reloads the panel with fresh numbers.
+   *Copilot Usage: Refresh Data*), then reloads the panel with fresh numbers.
 
 Nothing leaves your machine — the extractor only reads your local Copilot logs.
 
@@ -23,7 +23,7 @@ Nothing leaves your machine — the extractor only reads your local Copilot logs
   writes into its own local request logs (`debug-logs` and `chatSessions`). Older
   sessions get trimmed and debug logs rotate, so a machine may show only request
   counts — that's about what was retained, **not** a logging setting. Run
-  *GHCP Usage: Diagnostics* to see exactly what was found and why.
+  *Copilot Usage: Diagnostics* to see exactly what was found and why.
 
 ## Develop / run
 
@@ -33,7 +33,7 @@ npm install
 npm run compile
 ```
 
-Then press **F5** (Run Extension) and invoke **GHCP Usage: Open Dashboard** from
+Then press **F5** (Run Extension) and invoke **Copilot Usage: Open Dashboard** from
 the Command Palette.
 
 ## Settings

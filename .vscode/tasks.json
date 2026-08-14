@@ -181,13 +181,13 @@
 			"label": "Install extension (.vsix)",
 			"type": "shell",
 			"windows": {
-				"command": "code --uninstall-extension local.ghcp-usage-metrics 2>$null; code --install-extension (Get-ChildItem '${workspaceFolder}/extension/*.vsix' | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName --force; $keep = ((Get-Content \"$HOME/.vscode/extensions/extensions.json\" -Raw | ConvertFrom-Json) | Where-Object { $_.identifier.id -eq 'local.ghcp-usage-metrics' }).location.path -replace '.*/',''; Get-ChildItem \"$HOME/.vscode/extensions\" -Directory -Filter 'local.ghcp-usage-metrics-*' | Where-Object { $_.Name -ne $keep } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue"
+				"command": "code --uninstall-extension local.ghcp-usage-metrics 2>$null; code --uninstall-extension vinay-p-singh.ghcp-usage-metrics 2>$null; code --install-extension (Get-ChildItem '${workspaceFolder}/extension/*.vsix' | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName --force; $keep = ((Get-Content \"$HOME/.vscode/extensions/extensions.json\" -Raw | ConvertFrom-Json) | Where-Object { $_.identifier.id -eq 'vinay-p-singh.ghcp-usage-metrics' }).location.path -replace '.*/',''; Get-ChildItem \"$HOME/.vscode/extensions\" -Directory -Filter '*.ghcp-usage-metrics-*' | Where-Object { $_.Name -ne $keep } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue"
 			},
 			"linux": {
-				"command": "code --uninstall-extension local.ghcp-usage-metrics || true; code --install-extension \"$(ls -t ${workspaceFolder}/extension/*.vsix | head -n1)\" --force"
+				"command": "code --uninstall-extension local.ghcp-usage-metrics || true; code --uninstall-extension vinay-p-singh.ghcp-usage-metrics || true; code --install-extension \"$(ls -t ${workspaceFolder}/extension/*.vsix | head -n1)\" --force"
 			},
 			"osx": {
-				"command": "code --uninstall-extension local.ghcp-usage-metrics || true; code --install-extension \"$(ls -t ${workspaceFolder}/extension/*.vsix | head -n1)\" --force"
+				"command": "code --uninstall-extension local.ghcp-usage-metrics || true; code --uninstall-extension vinay-p-singh.ghcp-usage-metrics || true; code --install-extension \"$(ls -t ${workspaceFolder}/extension/*.vsix | head -n1)\" --force"
 			},
 			"problemMatcher": [],
 			"presentation": {

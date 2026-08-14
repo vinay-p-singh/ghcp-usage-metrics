@@ -108,7 +108,7 @@ def write_dashboard(projects: list[dict], diag: dict | None = None) -> None:
 
 
 def diagnostics() -> dict:
-    """What the extractor can actually see locally. Used by the *GHCP Usage:
+    """What the extractor can actually see locally. Used by the *Copilot Usage:
     Diagnostics* command to explain why token/AIU data may be missing on a
     machine: it reports which VS Code roots were scanned and, critically, how
     many logs still carry the token/credit fields the dashboard needs
