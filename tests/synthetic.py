@@ -74,7 +74,8 @@ def build_vscode(root: str, db_path: str) -> None:
         "sessionId": "s3", "creationDate": ms(2026, 5, 1),
         "requests": [{"timestamp": ms(2026, 5, 1), "promptTokens": 10,
                       "completionTokens": 2, "copilotCredits": 0.5,
-                      "modelId": "copilot/gpt-x"}]}))
+                      "modelId": "copilot/gpt-x",
+                      "response": [{"value": "here\n```python\nprint(1)\n```\n"}]}]}))
     # s4 records its counts only under result.metadata, as some retained
     # sessions do -- reading just the top level would score this as zero.
     write(os.path.join(chat, "s4.json"), json.dumps({
@@ -96,9 +97,12 @@ def build_vscode(root: str, db_path: str) -> None:
          ("s4", "https://github.com/acme/alpha", None, "", None)])
     conn.execute("CREATE TABLE session_files "
                  "(id INTEGER, session_id TEXT, file_path TEXT, tool_name TEXT, turn_index INTEGER)")
-    conn.execute(
+    # s1 is a single-day session; s2 spans day1 (main) and day2 (subagent child),
+    # which is what makes the per-day skill split observable.
+    conn.executemany(
         "INSERT INTO session_files (id, session_id, file_path) VALUES (?,?,?)",
-        (1, "s1", "C:/x/skills/web-artifacts-builder/SKILL.md"))
+        [(1, "s1", "C:/x/skills/web-artifacts-builder/SKILL.md"),
+         (2, "s2", "C:/x/skills/obsidian/SKILL.md")])
     conn.commit()
     conn.close()
 

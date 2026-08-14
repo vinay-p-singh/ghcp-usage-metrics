@@ -226,6 +226,31 @@ function modelTotalsIn(cl, from, to) {
   return out;
 }
 
+// Totals for any `date<SEP>name` dimension inside [from, to], collapsed onto
+// the name. Skills, agents, tools and languages all carry the date in the key
+// for exactly this reason: without it those panels reported lifetime figures
+// under every filter. The stored value is either a bucket of measures or a bare
+// count, and both fold the same way, so one reader serves all four.
+function dimTotalsIn(cl, dim, from, to) {
+  const out = {};
+  const src = (cl && cl[dim]) || {};
+  for (const key in src) {
+    const i = key.indexOf(DIM_SEP);
+    if (i < 0) continue;
+    const date = key.slice(0, i);
+    if (date < from || date > to) continue;
+    const name = key.slice(i + 1);
+    const v = src[key];
+    if (typeof v === "number") {
+      out[name] = (out[name] || 0) + v;
+      continue;
+    }
+    const t = out[name] || (out[name] = {});
+    for (const f in v) t[f] = (t[f] || 0) + v[f];
+  }
+  return out;
+}
+
 // Did this project ever record a token or a credit?
 //
 // Sessions get opened that never reach a model, and trimmed logs leave behind
@@ -469,7 +494,7 @@ function sortSessions(rows, key, dir) {
 // node --test requires the file directly and gets the exports.
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { esc, fmt, fmtAiu, fmtK, usdFrom, normCfg, matchesAny, hasRecordedUsage, CLIENT_KEYS,
-    dayTotalsByModel, modelTotalsIn, sessionTotalsIn, DIM_SEP, NO_MODEL, isRecordedModel,
+    dayTotalsByModel, modelTotalsIn, sessionTotalsIn, dimTotalsIn, DIM_SEP, NO_MODEL, isRecordedModel,
                      aliasClients, clampToSpan, addDays, windowSum, sessTotal,
                      calBucket, CLIENT_ALIAS, arcPath, pieSegments, forecastFrom,
                      rankAgents, splitAgents, priciestPerRequest, BASE_AGENTS,

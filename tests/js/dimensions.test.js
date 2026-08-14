@@ -129,7 +129,8 @@ test("session totals follow matching activity dates and exclude unattributed fac
 
 const C = (o) => Object.assign({
   by_day: {}, by_model: {}, by_agent: {}, by_am: {}, by_dm: {}, by_sdm: {},
-  by_skill: {}, by_tool: {}, by_lang: {}, session_names: {} }, o);
+  by_da: {}, by_dam: {}, by_skill: {}, by_ds: {}, by_tool: {}, by_dt: {},
+  by_lang: {}, by_dl: {}, session_names: {} }, o);
 
 function proj() {
   return [{
@@ -249,4 +250,41 @@ test("sorting never mutates the caller's array", () => {
   const copy = SROWS.slice();
   lib.sortSessions(SROWS, "in", "asc");
   assert.deepEqual(SROWS, copy);
+});
+
+// ---- dated dimensions ------------------------------------------------------
+// Skills, agents, tools and languages each carry a date in their key so the
+// calendar can re-scope them. One reader serves all four: the value is either a
+// bucket of measures or a bare count, and both collapse onto the name the same
+// way.
+
+test("dimTotalsIn keeps only the dates inside the window", () => {
+  const client = {
+    by_ds: {
+      [`2026-07-01${SEP}obsidian`]: { reads: 1, sessions: 1, requests: 2, in: 20, out: 4, aiu: 3 },
+      [`2026-07-02${SEP}obsidian`]: { reads: 0, sessions: 0, requests: 8, in: 80, out: 16, aiu: 12 },
+      [`2026-07-09${SEP}obsidian`]: { reads: 5, sessions: 5, requests: 5, in: 50, out: 10, aiu: 99 }
+    }
+  };
+  const got = lib.dimTotalsIn(client, "by_ds", "2026-07-01", "2026-07-02");
+  assert.deepEqual(got, { obsidian: { reads: 1, sessions: 1, requests: 10, in: 100, out: 20, aiu: 15 } });
+});
+
+test("dimTotalsIn sums the bare counts the same way", () => {
+  const client = {
+    by_dt: {
+      [`2026-07-01${SEP}read_file`]: 3,
+      [`2026-07-02${SEP}read_file`]: 4,
+      [`2026-07-02${SEP}grep_search`]: 1,
+      [`2026-07-09${SEP}read_file`]: 99
+    }
+  };
+  assert.deepEqual(lib.dimTotalsIn(client, "by_dt", "2026-07-01", "2026-07-02"),
+                   { read_file: 7, grep_search: 1 });
+});
+
+test("dimTotalsIn is empty rather than absent when nothing is in range", () => {
+  const client = { by_dl: { [`2026-07-09${SEP}python`]: 2 } };
+  assert.deepEqual(lib.dimTotalsIn(client, "by_dl", "2026-07-01", "2026-07-02"), {});
+  assert.deepEqual(lib.dimTotalsIn({}, "by_dl", "2026-07-01", "2026-07-02"), {});
 });

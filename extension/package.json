@@ -2,7 +2,7 @@
   "name": "ghcp-usage-metrics",
   "displayName": "GHCP Usage Metrics",
   "description": "Local dashboard of your GitHub Copilot token & AI-credit (AIU) usage per project, model, harness, agent, skill and day, with cost ranking, strengths and forecasting. Runs the bundled Python extractor (usage.py) and hosts its report in a webview. Refresh re-scans your logs live. Nothing leaves your machine.",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "publisher": "local",
   "license": "MIT",
   "icon": "media/icon.png",

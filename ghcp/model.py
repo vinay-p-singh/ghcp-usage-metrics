@@ -10,8 +10,13 @@ same activity:
   by_dm     f"{date}{AM_SEP}{model}"  -> {requests, in, out, aiu, cached, cached_req}
   by_sdm    f"{session}{AM_SEP}{date}{AM_SEP}{model}" -> same measures
   by_skill  skill -> {reads, sessions, requests, in, out, aiu}
+  by_ds     f"{date}{AM_SEP}{skill}" -> same measures as by_skill
+  by_da     f"{date}{AM_SEP}{agent}" -> same measures as by_agent
+  by_dam    f"{date}{AM_SEP}{agent}{AM_SEP}{model}" -> same measures as by_am
   by_tool   tool  -> count
+  by_dt     f"{date}{AM_SEP}{tool}" -> count
   by_lang   lang  -> count
+  by_dl     f"{date}{AM_SEP}{lang}" -> count
   session_names  session -> the name its source recorded, when it recorded one
 
 Every AIU total must agree across by_day / by_model / by_agent / by_am / by_dm
@@ -23,6 +28,18 @@ keeping only the two separate aggregates threw that pairing away, which is what
 used to make a model filter unable to move the headline numbers. ``by_sdm``
 adds the session to that same pairing, so it is the finest grain recorded and
 every coarser dimension is a projection of it.
+
+``by_ds`` / ``by_da`` / ``by_dt`` / ``by_dl`` are the same idea for the
+remaining panels: without a date in the key the calendar could not move them
+either, so those panels reported lifetime figures under every filter. Each one
+collapses back onto its undated twin exactly -- a re-cut of the same facts, not
+extra ones.
+
+Skill reads are the one measure with no timestamp to cut on: ``session_files``
+records that a session read a SKILL.md, never when. They are therefore counted
+once, on the session's first active day, so a session spanning two days splits
+its credits by the day they were spent while its read count stays exact.
+Repeating the reads on every active day would have read higher than the truth.
 
 A session spans days and models, so ``by_sdm`` deliberately carries no
 ``sessions`` count: distinctness comes from its key, never from summing a
@@ -79,9 +96,14 @@ def _metrics() -> dict:
             "by_am": defaultdict(_flatbucket),
             "by_dm": defaultdict(_flatbucket),
             "by_sdm": defaultdict(_flatbucket),
+            "by_da": defaultdict(_flatbucket),
+            "by_dam": defaultdict(_flatbucket),
             "by_skill": defaultdict(_skillbucket),
+            "by_ds": defaultdict(_skillbucket),
             "by_tool": defaultdict(int),
+            "by_dt": defaultdict(int),
             "by_lang": defaultdict(int),
+            "by_dl": defaultdict(int),
             "session_names": {}}
 
 
@@ -129,9 +151,14 @@ def _merge(d: dict, members: list[str]) -> dict:
     by_am: dict[str, dict] = {}
     by_dm: dict[str, dict] = {}
     by_sdm: dict[str, dict] = {}
+    by_da: dict[str, dict] = {}
+    by_dam: dict[str, dict] = {}
     by_skill: dict[str, dict] = {}
+    by_ds: dict[str, dict] = {}
     by_tool: dict[str, int] = {}
+    by_dt: dict[str, int] = {}
     by_lang: dict[str, int] = {}
+    by_dl: dict[str, int] = {}
     session_names: dict[str, str] = {}
     for m in members:
         x = d.get(m)
@@ -143,26 +170,31 @@ def _merge(d: dict, members: list[str]) -> dict:
                 t[f] += b[f]
         for dim_src, dim_dst in (("by_model", by_model), ("by_agent", by_agent),
                                  ("by_am", by_am), ("by_dm", by_dm),
-                                 ("by_sdm", by_sdm)):
+                                 ("by_sdm", by_sdm), ("by_da", by_da),
+                                 ("by_dam", by_dam)):
             for key, b in x.get(dim_src, {}).items():
                 t = dim_dst.setdefault(key, _flatbucket())
                 for f in FLAT_FIELDS:
                     t[f] += b[f]
-        for key, b in x.get("by_skill", {}).items():
-            t = by_skill.setdefault(key, _skillbucket())
-            for f in SKILL_FIELDS:
-                t[f] += b.get(f, 0)
-        for dim_src, dim_dst in (("by_tool", by_tool), ("by_lang", by_lang)):
+        for dim_src, dim_dst in (("by_skill", by_skill), ("by_ds", by_ds)):
+            for key, b in x.get(dim_src, {}).items():
+                t = dim_dst.setdefault(key, _skillbucket())
+                for f in SKILL_FIELDS:
+                    t[f] += b.get(f, 0)
+        for dim_src, dim_dst in (("by_tool", by_tool), ("by_lang", by_lang),
+                                 ("by_dt", by_dt), ("by_dl", by_dl)):
             for key, c in x.get(dim_src, {}).items():
                 dim_dst[key] = dim_dst.get(key, 0) + c
         session_names.update(x.get("session_names", {}))
-    for grp in (by_day, by_model, by_agent, by_am, by_dm, by_sdm, by_skill):
+    for grp in (by_day, by_model, by_agent, by_am, by_dm, by_sdm, by_da, by_dam,
+                by_skill, by_ds):
         for b in grp.values():
             b["aiu"] = round(b["aiu"], 4)
     return {"by_day": by_day, "by_model": by_model, "by_agent": by_agent,
-            "by_am": by_am, "by_dm": by_dm, "by_sdm": by_sdm,
-            "by_skill": by_skill,
-            "by_tool": by_tool, "by_lang": by_lang,
+            "by_am": by_am, "by_dm": by_dm, "by_sdm": by_sdm, "by_da": by_da,
+            "by_dam": by_dam, "by_skill": by_skill, "by_ds": by_ds,
+            "by_tool": by_tool, "by_dt": by_dt,
+            "by_lang": by_lang, "by_dl": by_dl,
             "session_names": session_names}
 
 

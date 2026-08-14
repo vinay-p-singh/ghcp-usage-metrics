@@ -29,18 +29,23 @@ UPDATING = os.environ.get("UPDATE_GOLDEN") == "1"
 HARNESSES = ["vscode", "cli", "claude"]
 PROJECT_KEYS = ["name"] + HARNESSES
 DIMENSIONS = ["by_day", "by_model", "by_agent", "by_am", "by_dm", "by_sdm",
-              "by_skill", "by_tool", "by_lang", "session_names"]
+              "by_da", "by_dam", "by_skill", "by_ds", "by_tool", "by_dt",
+              "by_lang", "by_dl", "session_names"]
 DAY_FIELDS = ["sessions", "requests", "in", "out", "aiu", "cached", "cached_req"]
 FLAT_FIELDS = ["requests", "in", "out", "aiu", "cached", "cached_req"]
 SKILL_FIELDS = ["reads", "sessions", "requests", "in", "out", "aiu"]
 
 # Dimensions whose key is two values joined by AM_SEP, and what those two are.
 COMPOSITE = {"by_am": ["agent", "model"], "by_dm": ["date", "model"],
-             "by_sdm": ["session", "date", "model"]}
+             "by_sdm": ["session", "date", "model"],
+             "by_da": ["date", "agent"], "by_ds": ["date", "skill"],
+             "by_dam": ["date", "agent", "model"],
+             "by_dt": ["date", "tool"], "by_dl": ["date", "lang"]}
 # Dimensions that carry a plain count rather than a bucket of measures.
-COUNTED = ["by_tool", "by_lang"]
+COUNTED = ["by_tool", "by_dt", "by_lang", "by_dl"]
 # Dimensions whose values are a bucket of the flat measures.
-FLAT_DIMENSIONS = ["by_model", "by_agent", "by_am", "by_dm", "by_sdm"]
+FLAT_DIMENSIONS = ["by_model", "by_agent", "by_am", "by_dm", "by_sdm", "by_da",
+                   "by_dam"]
 # Dimensions whose values are a plain string.
 NAMED = ["session_names"]
 
@@ -74,6 +79,8 @@ def test_measures_are_named_the_same_wherever_they_appear(projects):
                 for b in rec[dim].values():
                     assert sorted(b) == sorted(FLAT_FIELDS), dim
             for b in rec["by_skill"].values():
+                assert sorted(b) == sorted(SKILL_FIELDS)
+            for b in rec["by_ds"].values():
                 assert sorted(b) == sorted(SKILL_FIELDS)
             for dim in COUNTED:
                 for c in rec[dim].values():

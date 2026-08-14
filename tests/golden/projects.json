@@ -3,8 +3,13 @@
     "claude": {
       "by_agent": {},
       "by_am": {},
+      "by_da": {},
+      "by_dam": {},
       "by_day": {},
+      "by_dl": {},
       "by_dm": {},
+      "by_ds": {},
+      "by_dt": {},
       "by_lang": {},
       "by_model": {},
       "by_sdm": {},
@@ -15,8 +20,13 @@
     "cli": {
       "by_agent": {},
       "by_am": {},
+      "by_da": {},
+      "by_dam": {},
       "by_day": {},
+      "by_dl": {},
       "by_dm": {},
+      "by_ds": {},
+      "by_dt": {},
       "by_lang": {},
       "by_model": {},
       "by_sdm": {},
@@ -62,6 +72,58 @@
           "requests": 1
         }
       },
+      "by_da": {
+        "2026-05-01\u001fGitHub Copilot Chat": {
+          "aiu": 2.0,
+          "cached": 0,
+          "cached_req": 0,
+          "in": 710,
+          "out": 42,
+          "requests": 2
+        },
+        "2026-05-02\u001fGitHub Copilot Chat": {
+          "aiu": 9.0,
+          "cached": 150,
+          "cached_req": 1,
+          "in": 350,
+          "out": 70,
+          "requests": 3
+        },
+        "2026-05-03\u001fResearcher": {
+          "aiu": 2.0,
+          "cached": 0,
+          "cached_req": 0,
+          "in": 500,
+          "out": 100,
+          "requests": 1
+        }
+      },
+      "by_dam": {
+        "2026-05-01\u001fGitHub Copilot Chat\u001fgpt-x": {
+          "aiu": 2.0,
+          "cached": 0,
+          "cached_req": 0,
+          "in": 710,
+          "out": 42,
+          "requests": 2
+        },
+        "2026-05-02\u001fGitHub Copilot Chat\u001fgpt-x": {
+          "aiu": 9.0,
+          "cached": 150,
+          "cached_req": 1,
+          "in": 350,
+          "out": 70,
+          "requests": 3
+        },
+        "2026-05-03\u001fResearcher\u001fclaude": {
+          "aiu": 2.0,
+          "cached": 0,
+          "cached_req": 0,
+          "in": 500,
+          "out": 100,
+          "requests": 1
+        }
+      },
       "by_day": {
         "2026-05-01": {
           "aiu": 2.0,
@@ -91,6 +153,9 @@
           "sessions": 0
         }
       },
+      "by_dl": {
+        "2026-05-01\u001fpython": 1
+      },
       "by_dm": {
         "2026-05-01\u001fgpt-x": {
           "aiu": 2.0,
@@ -117,7 +182,38 @@
           "requests": 1
         }
       },
-      "by_lang": {},
+      "by_ds": {
+        "2026-05-02\u001fobsidian": {
+          "aiu": 1.0,
+          "in": 50,
+          "out": 10,
+          "reads": 1,
+          "requests": 1,
+          "sessions": 1
+        },
+        "2026-05-02\u001fweb-artifacts-builder": {
+          "aiu": 8.0,
+          "in": 300,
+          "out": 60,
+          "reads": 1,
+          "requests": 2,
+          "sessions": 1
+        },
+        "2026-05-03\u001fobsidian": {
+          "aiu": 2.0,
+          "in": 500,
+          "out": 100,
+          "reads": 0,
+          "requests": 1,
+          "sessions": 0
+        }
+      },
+      "by_dt": {
+        "2026-08-14\u001fread_file": 1
+      },
+      "by_lang": {
+        "python": 1
+      },
       "by_model": {
         "claude": {
           "aiu": 2.0,
@@ -179,6 +275,14 @@
         }
       },
       "by_skill": {
+        "obsidian": {
+          "aiu": 3.0,
+          "in": 550,
+          "out": 110,
+          "reads": 1,
+          "requests": 2,
+          "sessions": 1
+        },
         "web-artifacts-builder": {
           "aiu": 8.0,
           "in": 300,
@@ -201,8 +305,13 @@
     "claude": {
       "by_agent": {},
       "by_am": {},
+      "by_da": {},
+      "by_dam": {},
       "by_day": {},
+      "by_dl": {},
       "by_dm": {},
+      "by_ds": {},
+      "by_dt": {},
       "by_lang": {},
       "by_model": {},
       "by_sdm": {},
@@ -239,6 +348,42 @@
           "requests": 1
         }
       },
+      "by_da": {
+        "2026-07-05\u001fCopilot CLI": {
+          "aiu": 0.0,
+          "cached": 0,
+          "cached_req": 0,
+          "in": 0,
+          "out": 0,
+          "requests": 1
+        },
+        "2026-07-10\u001fCopilot CLI": {
+          "aiu": 4.0,
+          "cached": 700,
+          "cached_req": 1,
+          "in": 1000,
+          "out": 200,
+          "requests": 1
+        }
+      },
+      "by_dam": {
+        "2026-07-05\u001fCopilot CLI\u001f(no token data)": {
+          "aiu": 0.0,
+          "cached": 0,
+          "cached_req": 0,
+          "in": 0,
+          "out": 0,
+          "requests": 1
+        },
+        "2026-07-10\u001fCopilot CLI\u001fgpt-cli": {
+          "aiu": 4.0,
+          "cached": 700,
+          "cached_req": 1,
+          "in": 1000,
+          "out": 200,
+          "requests": 1
+        }
+      },
       "by_day": {
         "2026-07-05": {
           "aiu": 0.0,
@@ -259,6 +404,7 @@
           "sessions": 1
         }
       },
+      "by_dl": {},
       "by_dm": {
         "2026-07-05\u001f(no token data)": {
           "aiu": 0.0,
@@ -277,6 +423,8 @@
           "requests": 1
         }
       },
+      "by_ds": {},
+      "by_dt": {},
       "by_lang": {},
       "by_model": {
         "(no token data)": {
@@ -324,8 +472,13 @@
     "vscode": {
       "by_agent": {},
       "by_am": {},
+      "by_da": {},
+      "by_dam": {},
       "by_day": {},
+      "by_dl": {},
       "by_dm": {},
+      "by_ds": {},
+      "by_dt": {},
       "by_lang": {},
       "by_model": {},
       "by_sdm": {},
@@ -356,6 +509,26 @@
           "requests": 1
         }
       },
+      "by_da": {
+        "2026-06-01\u001fClaude Code": {
+          "aiu": 0.0,
+          "cached": 15,
+          "cached_req": 1,
+          "in": 115,
+          "out": 20,
+          "requests": 1
+        }
+      },
+      "by_dam": {
+        "2026-06-01\u001fClaude Code\u001fclaude-3": {
+          "aiu": 0.0,
+          "cached": 15,
+          "cached_req": 1,
+          "in": 115,
+          "out": 20,
+          "requests": 1
+        }
+      },
       "by_day": {
         "2026-06-01": {
           "aiu": 0.0,
@@ -367,6 +540,7 @@
           "sessions": 1
         }
       },
+      "by_dl": {},
       "by_dm": {
         "2026-06-01\u001fclaude-3": {
           "aiu": 0.0,
@@ -377,6 +551,8 @@
           "requests": 1
         }
       },
+      "by_ds": {},
+      "by_dt": {},
       "by_lang": {},
       "by_model": {
         "claude-3": {
@@ -405,8 +581,13 @@
     "cli": {
       "by_agent": {},
       "by_am": {},
+      "by_da": {},
+      "by_dam": {},
       "by_day": {},
+      "by_dl": {},
       "by_dm": {},
+      "by_ds": {},
+      "by_dt": {},
       "by_lang": {},
       "by_model": {},
       "by_sdm": {},
@@ -418,8 +599,13 @@
     "vscode": {
       "by_agent": {},
       "by_am": {},
+      "by_da": {},
+      "by_dam": {},
       "by_day": {},
+      "by_dl": {},
       "by_dm": {},
+      "by_ds": {},
+      "by_dt": {},
       "by_lang": {},
       "by_model": {},
       "by_sdm": {},

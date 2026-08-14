@@ -21,7 +21,7 @@ from ghcp.window import in_window
 
 # Bumped whenever a summary gains a field. A record from an older version is
 # re-parsed rather than trusted, so a stale cache cannot silently omit a measure.
-CACHE_VERSION = 2
+CACHE_VERSION = 3
 
 
 def load_cache(path: str) -> dict:
@@ -71,6 +71,8 @@ def billing_for_file(path: str, cache: dict) -> dict:
     by_dm: dict[str, dict] = {}
     childrefs: dict[str, str] = {}
     tools: dict[str, int] = {}
+    dtools: dict[str, int] = {}
+    undated_tools: dict[str, int] = {}
     bad = 0
     with open(path, encoding="utf-8", errors="replace") as fh:
         for line in fh:
@@ -94,6 +96,15 @@ def billing_for_file(path: str, cache: dict) -> dict:
                 nm = ta.get("name") or ev.get("name")
                 if nm:
                     tools[nm] = tools.get(nm, 0) + 1
+                    tts = ev.get("ts")
+                    if isinstance(tts, (int, float)):
+                        k = _utc_date_ms(tts) + AM_SEP + nm
+                        dtools[k] = dtools.get(k, 0) + 1
+                    else:
+                        # Tool events do not always carry a stamp. Hold them
+                        # back and file them on the log's first billed day, so
+                        # the dated counts still sum to the undated ones.
+                        undated_tools[nm] = undated_tools.get(nm, 0) + 1
                 continue
             a = ev.get("attrs") or {}
             ts = ev.get("ts")
@@ -124,24 +135,39 @@ def billing_for_file(path: str, cache: dict) -> dict:
                 b["cached_req"] += cached_req
     rec = {"v": CACHE_VERSION, "size": st.st_size, "mtime": int(st.st_mtime),
            "by_day": by_day, "by_model": by_model, "by_dm": by_dm, "tools": tools,
+           "dtools": dtools, "utools": undated_tools,
            "childrefs": childrefs, "bad": bad}
     cache[path] = rec
     return rec
 
 
-def apply_billing(m: dict, agent: str, rec: dict) -> tuple[int, int, int, float]:
+def apply_billing(m: dict, agent: str, rec: dict,
+                  anchor: str | None = None) -> tuple[int, int, int, float]:
     """Fold one main/child ``billing_for_file`` record into a project's metrics,
     attributing every request's tokens to the display ``agent``. Updates by_day,
     by_tool, by_model, by_am and (once) by_agent; returns this log's
     ``(requests, input, output, aiu)`` totals so the caller can track the
     session-wide total across the parent and all its child logs.
+
+    ``anchor`` dates the tool calls the log recorded without a stamp of their
+    own. The caller knows the session's date even when the log's own events do
+    not, so nothing is dropped and nothing is invented.
     """
     for date, b in rec.get("by_day", {}).items():
         _add_day(m, date, requests=b["requests"], in_=b["in"],
                  out=b["out"], aiu=b["aiu"], cached=b.get("cached", 0),
                  cached_req=b.get("cached_req", 0))
+        _add_flat(m["by_da"], date + AM_SEP + agent, requests=b["requests"],
+                  in_=b["in"], out=b["out"], aiu=b["aiu"],
+                  cached=b.get("cached", 0), cached_req=b.get("cached_req", 0))
     for tname, tc in rec.get("tools", {}).items():
         m["by_tool"][tname] += tc
+    for key, tc in rec.get("dtools", {}).items():
+        m["by_dt"][key] += tc
+    stamp = anchor or (min(rec["by_day"]) if rec.get("by_day") else None)
+    if stamp:
+        for tname, tc in rec.get("utools", {}).items():
+            m["by_dt"][stamp + AM_SEP + tname] += tc
     req = in_ = out = 0
     aiu = 0.0
     for model, b in rec.get("by_model", {}).items():
@@ -157,6 +183,13 @@ def apply_billing(m: dict, agent: str, rec: dict) -> tuple[int, int, int, float]
     for key, b in rec.get("by_dm", {}).items():
         _add_flat(m["by_dm"], key, requests=b["requests"], in_=b["in"],
                   out=b["out"], aiu=b["aiu"], cached=b.get("cached", 0),
+                  cached_req=b.get("cached_req", 0))
+        # date<SEP>model is already the pairing the log recorded; the agent is
+        # fixed for the whole log, so date<SEP>agent<SEP>model is exact.
+        date, _, model = key.partition(AM_SEP)
+        _add_flat(m["by_dam"], date + AM_SEP + agent + AM_SEP + model,
+                  requests=b["requests"], in_=b["in"], out=b["out"],
+                  aiu=b["aiu"], cached=b.get("cached", 0),
                   cached_req=b.get("cached_req", 0))
     if req:
         _add_flat(m["by_agent"], agent, requests=req, in_=in_, out=out, aiu=aiu,

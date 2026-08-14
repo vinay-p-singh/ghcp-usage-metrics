@@ -24,7 +24,9 @@ if not os.path.isfile(_SNAPSHOT):
 with open(_SNAPSHOT, encoding="utf-8") as _fh:
     PROJECTS = json.load(_fh)
 
-_CLIENT_DIMS = ("by_day", "by_model", "by_agent", "by_am", "by_dm", "by_skill", "by_tool", "by_lang")
+_CLIENT_DIMS = ("by_day", "by_model", "by_agent", "by_am", "by_dm", "by_da",
+                "by_dam", "by_skill", "by_ds", "by_tool", "by_dt", "by_lang",
+                "by_dl")
 # Per-bucket AIU is rounded to 4 dp, so summed dimensions may drift slightly.
 _TOL = 0.05
 
@@ -184,3 +186,38 @@ def test_session_names_are_capped_and_never_invented():
             assert len(names) <= counted, (
                 f"{p['name']}/{surface}: {len(names)} names for {counted} sessions")
     assert named, "no session names in the snapshot -- this test proved nothing"
+
+
+def test_the_dated_dimensions_sum_back_on_real_data():
+    """The fixture proves the split is exact; this proves it on the real logs.
+
+    A dated dimension is a re-cut of facts already counted, so collapsing the
+    date has to land on its undated twin. Drift here would mean a filtered view
+    reading higher -- or lower -- than the total it was cut from.
+    """
+    pairs = [("by_ds", "by_skill"), ("by_da", "by_agent"), ("by_dam", "by_am")]
+    for p in PROJECTS:
+        for surface in ("vscode", "cli", "claude"):
+            c = p[surface]
+            for dated, flat in pairs:
+                rolled: dict = {}
+                for key, b in c[dated].items():
+                    _, _, name = key.partition(usage._AM_SEP)
+                    rolled[name] = rolled.get(name, 0.0) + b["aiu"]
+                for name, v in rolled.items():
+                    got = c[flat].get(name, {}).get("aiu", 0.0)
+                    assert abs(v - got) <= _TOL, (
+                        f"{p['name']}/{surface}/{flat}[{name}]: "
+                        f"dated sum {v} != flat {got}")
+
+
+def test_the_dated_counts_sum_back_on_real_data():
+    for p in PROJECTS:
+        for surface in ("vscode", "cli", "claude"):
+            c = p[surface]
+            for dated, flat in (("by_dt", "by_tool"), ("by_dl", "by_lang")):
+                rolled: dict = {}
+                for key, n in c[dated].items():
+                    _, _, name = key.partition(usage._AM_SEP)
+                    rolled[name] = rolled.get(name, 0) + n
+                assert rolled == c[flat], f"{p['name']}/{surface}/{dated}"

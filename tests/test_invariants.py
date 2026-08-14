@@ -13,7 +13,7 @@ from __future__ import annotations
 import pytest
 
 import synthetic
-from ghcp.constants import NO_TOKEN
+from ghcp.constants import AM_SEP, NO_TOKEN
 from ghcp.naming import _canon
 from ghcp.normalize import _any_date
 
@@ -254,3 +254,83 @@ def test_a_day_is_never_invented_when_the_source_gave_nothing_usable():
     that would silently move usage onto a day it did not happen."""
     for junk in (None, "", "not-a-date", [], {}):
         assert _any_date(junk) is None
+
+
+# --- INV-35: a dated dimension is a projection of its flat twin ---------------
+
+_DATED_TWINS = [("by_ds", "by_skill", ("reads", "sessions", "requests", "in", "out", "aiu")),
+                ("by_da", "by_agent", ("requests", "in", "out", "aiu"))]
+_DATED_COUNTS = [("by_dt", "by_tool"), ("by_dl", "by_lang")]
+
+
+def test_the_dated_agent_model_dimension_sums_back_to_its_flat_twin(projects):
+    """INV-35, for the three-part key. The agent panel expands into a per-model
+    breakdown, so that breakdown has to move with the date filter too -- a row
+    that re-scopes above a sub-table that does not would not add up to itself.
+    """
+    fields = ("requests", "in", "out", "aiu")
+    seen = 0
+    for p in projects:
+        for h in ("vscode", "cli", "claude"):
+            rec = p[h]
+            rolled: dict[str, dict] = {}
+            for key, b in rec["by_dam"].items():
+                _, agent_model = key.split(AM_SEP, 1)
+                t = rolled.setdefault(agent_model, dict.fromkeys(fields, 0))
+                for f in fields:
+                    t[f] += b[f]
+            assert set(rolled) == set(rec["by_am"]), (
+                f"{p['name']} {h}: by_dam and by_am name different members")
+            for key, t in rolled.items():
+                seen += 1
+                for f in fields:
+                    assert round(t[f], 4) == round(rec["by_am"][key][f], 4), (
+                        f"{p['name']} {h} by_am[{key}].{f} disagrees with by_dam")
+    assert seen, "no by_am members in the fixture -- this test proved nothing"
+
+
+@pytest.mark.parametrize("dated,flat,fields", _DATED_TWINS)
+def test_a_dated_dimension_sums_back_to_its_flat_twin(projects, dated, flat, fields):
+    """INV-35. The date-keyed dimensions exist so the calendar can re-scope the
+    skill/agent panels. They are a re-cut of the same facts, never extra ones --
+    so collapsing the date has to land exactly on the undated dimension.
+
+    An excess here means the split inflated the totals, which would make a
+    filtered view read higher than the truth it was cut from.
+    """
+    seen = 0
+    for p in projects:
+        for h in ("vscode", "cli", "claude"):
+            rec = p[h]
+            rolled: dict[str, dict] = {}
+            for key, b in rec[dated].items():
+                _, name = key.split(AM_SEP, 1)
+                t = rolled.setdefault(name, dict.fromkeys(fields, 0))
+                for f in fields:
+                    t[f] += b[f]
+            assert set(rolled) == set(rec[flat]), (
+                f"{p['name']} {h}: {dated} and {flat} name different members")
+            for name, t in rolled.items():
+                seen += 1
+                for f in fields:
+                    assert round(t[f], 4) == round(rec[flat][name][f], 4), (
+                        f"{p['name']} {h} {flat}[{name}].{f}: dated sum {t[f]} "
+                        f"!= flat {rec[flat][name][f]}")
+    assert seen, f"no {flat} members in the fixture -- this test proved nothing"
+
+
+@pytest.mark.parametrize("dated,flat", _DATED_COUNTS)
+def test_a_dated_count_sums_back_to_its_flat_twin(projects, dated, flat):
+    """INV-35, for the dimensions that carry a bare count rather than a bucket."""
+    seen = 0
+    for p in projects:
+        for h in ("vscode", "cli", "claude"):
+            rec = p[h]
+            rolled: dict[str, int] = {}
+            for key, c in rec[dated].items():
+                _, name = key.split(AM_SEP, 1)
+                rolled[name] = rolled.get(name, 0) + c
+            assert rolled == rec[flat], (
+                f"{p['name']} {h}: {dated} does not sum to {flat}")
+            seen += len(rolled)
+    assert seen, f"no {flat} members in the fixture -- this test proved nothing"

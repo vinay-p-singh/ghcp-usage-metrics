@@ -173,15 +173,24 @@ function aggregate(scope) {
         const b = mw[k];
         t.req += b.req; t.in += b.in; t.out += b.out; t.aiu += b.aiu;
       }
-      for (const k in (clm.by_agent || {})) _accDim(agg.agentAgg, k, clm.by_agent[k]);
-      for (const k in (clm.by_am || {})) _accDim(agg.amAgg, k, clm.by_am[k]);
-      for (const k in (clm.by_skill || {})) {
+      // Agents, skills, tools and languages all follow the date range now, the
+      // same as the model list. Each reads its date-keyed dimension rather than
+      // the undated one, which is what used to leave these panels reporting
+      // lifetime figures under every filter.
+      const aw = dimTotalsIn(clm, "by_da", from, to);
+      for (const k in aw) _accDim(agg.agentAgg, k, aw[k]);
+      const amw = dimTotalsIn(clm, "by_dam", from, to);
+      for (const k in amw) _accDim(agg.amAgg, k, amw[k]);
+      const sw = dimTotalsIn(clm, "by_ds", from, to);
+      for (const k in sw) {
         const s = agg.skillAgg[k] || (agg.skillAgg[k] = { reads: 0, sessions: 0, req: 0, in: 0, out: 0, aiu: 0 });
-        const b = clm.by_skill[k];
+        const b = sw[k];
         s.reads += b.reads; s.sessions += b.sessions; s.req += b.requests; s.in += b.in; s.out += b.out; s.aiu += b.aiu;
       }
-      for (const k in (clm.by_lang || {})) agg.langAgg[k] = (agg.langAgg[k] || 0) + clm.by_lang[k];
-      for (const k in (clm.by_tool || {})) agg.toolAgg[k] = (agg.toolAgg[k] || 0) + clm.by_tool[k];
+      const lw = dimTotalsIn(clm, "by_dl", from, to);
+      for (const k in lw) agg.langAgg[k] = (agg.langAgg[k] || 0) + lw[k];
+      const tw = dimTotalsIn(clm, "by_dt", from, to);
+      for (const k in tw) agg.toolAgg[k] = (agg.toolAgg[k] || 0) + tw[k];
     }
     agg.perProj.push({ name: d.name, sessions: ps, requests: pr, in: pi, out: po, aiu: pa });
     agg.aiu += pa; agg.req += pr; agg.inTok += pi; agg.outTok += po; agg.sessTot += ps;

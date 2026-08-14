@@ -4,9 +4,30 @@
       "agent",
       "model"
     ],
+    "by_da": [
+      "date",
+      "agent"
+    ],
+    "by_dam": [
+      "date",
+      "agent",
+      "model"
+    ],
+    "by_dl": [
+      "date",
+      "lang"
+    ],
     "by_dm": [
       "date",
       "model"
+    ],
+    "by_ds": [
+      "date",
+      "skill"
+    ],
+    "by_dt": [
+      "date",
+      "tool"
     ],
     "by_sdm": [
       "session",
@@ -16,7 +37,9 @@
   },
   "counted_dimensions": [
     "by_tool",
-    "by_lang"
+    "by_dt",
+    "by_lang",
+    "by_dl"
   ],
   "day_fields": [
     "sessions",
@@ -34,9 +57,14 @@
     "by_am",
     "by_dm",
     "by_sdm",
+    "by_da",
+    "by_dam",
     "by_skill",
+    "by_ds",
     "by_tool",
+    "by_dt",
     "by_lang",
+    "by_dl",
     "session_names"
   ],
   "flat_dimensions": [
@@ -44,7 +72,9 @@
     "by_agent",
     "by_am",
     "by_dm",
-    "by_sdm"
+    "by_sdm",
+    "by_da",
+    "by_dam"
   ],
   "flat_fields": [
     "requests",

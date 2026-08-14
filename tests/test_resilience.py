@@ -41,10 +41,10 @@ class TestScanContainment:
         paths = synthetic.build_tree(tmp_path)
         real = vs._scan_session_dir
 
-        def boom(entry, m, agent, cache):
+        def boom(entry, m, agent, cache, anchor=None):
             if entry.name == "s1":
                 raise OSError("session dir on fire")
-            return real(entry, m, agent, cache)
+            return real(entry, m, agent, cache, anchor)
 
         monkeypatch.setattr(vs, "_scan_session_dir", boom)
         out = vs.scan_vscode([(paths["vs_root"], paths["vs_db"])], paths["cache"])

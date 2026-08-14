@@ -127,23 +127,32 @@ def sid_skills_map(db: str) -> dict[str, dict[str, int]]:
     return out
 
 
-def _attribute_skills(m: dict, skills: dict | None, totals: tuple) -> None:
+def _attribute_skills(m: dict, skills: dict | None, per_day: dict) -> None:
     """Credit a session's totals to every skill whose SKILL.md it read.
 
     A session that used several skills counts toward each of them, so per-skill
     totals deliberately overlap. Read counts stay exact either way.
+
+    ``per_day`` maps date -> (requests, in, out, aiu) for this session, so the
+    credits land on the day they were spent and a date filter can cut them. The
+    reads themselves carry no timestamp -- ``session_files`` records that a
+    SKILL.md was read, never when -- so they are counted once on the session's
+    first active day. Repeating them per day would inflate the lifetime total.
     """
-    if not skills:
+    if not skills or not per_day:
         return
-    s_req, s_in, s_out, s_aiu = totals
+    first = min(per_day)
     for skname, reads in skills.items():
-        b = m["by_skill"][skname]
-        b["reads"] += reads
-        b["sessions"] += 1
-        b["requests"] += s_req
-        b["in"] += s_in
-        b["out"] += s_out
-        b["aiu"] += s_aiu
+        for date, (d_req, d_in, d_out, d_aiu) in per_day.items():
+            for bucket in (m["by_skill"][skname],
+                           m["by_ds"][date + AM_SEP + skname]):
+                bucket["requests"] += d_req
+                bucket["in"] += d_in
+                bucket["out"] += d_out
+                bucket["aiu"] += d_aiu
+        for bucket in (m["by_skill"][skname], m["by_ds"][first + AM_SEP + skname]):
+            bucket["reads"] += reads
+            bucket["sessions"] += 1
 
 
 def scan_chat_file(cf: str, out: dict, sid_repo: dict, sid_agent: dict,
@@ -176,8 +185,7 @@ def scan_chat_file(cf: str, out: dict, sid_repo: dict, sid_agent: dict,
     m = out[name]
     name_session(m, sid, (sid_summary or {}).get(sid))
     dates = []
-    s_req = s_in = s_out = 0
-    s_aiu = 0.0
+    per_day: dict[str, list] = {}
     for r in reqs:
         if not isinstance(r, dict):
             continue
@@ -196,22 +204,28 @@ def scan_chat_file(cf: str, out: dict, sid_repo: dict, sid_agent: dict,
         _add_day(m, date, requests=1, in_=it, out=ot, aiu=cc)
         _add_flat(m["by_model"], model, requests=1, in_=it, out=ot, aiu=cc)
         _add_flat(m["by_agent"], agent, requests=1, in_=it, out=ot, aiu=cc)
+        _add_flat(m["by_da"], date + AM_SEP + agent, requests=1, in_=it, out=ot, aiu=cc)
         _add_flat(m["by_am"], agent + AM_SEP + model, requests=1, in_=it, out=ot, aiu=cc)
+        _add_flat(m["by_dam"], date + AM_SEP + agent + AM_SEP + model,
+                  requests=1, in_=it, out=ot, aiu=cc)
         _add_flat(m["by_dm"], date + AM_SEP + model, requests=1, in_=it, out=ot, aiu=cc)
         _add_flat(m["by_sdm"], sid + AM_SEP + date + AM_SEP + model,
                   requests=1, in_=it, out=ot, aiu=cc)
-        s_req += 1
-        s_in += it
-        s_out += ot
-        s_aiu += cc
+        d = per_day.setdefault(date, [0, 0, 0, 0.0])
+        d[0] += 1
+        d[1] += it
+        d[2] += ot
+        d[3] += cc
         md = (r.get("result") or {}).get("metadata") or {}
         for rd in (md.get("toolCallRounds") or []):
             for tc in (rd.get("toolCalls") or []):
                 nm = tc.get("name") if isinstance(tc, dict) else None
                 if nm:
                     m["by_tool"][nm] += 1
+                    m["by_dt"][date + AM_SEP + nm] += 1
         for lang in _langs_from_response(r.get("response")):
             m["by_lang"][lang] += 1
+            m["by_dl"][date + AM_SEP + lang] += 1
 
     # Session-activity days: a session's creation + last-message timestamps are
     # real evidence the user worked that day, even after the request bodies were
@@ -226,27 +240,44 @@ def scan_chat_file(cf: str, out: dict, sid_repo: dict, sid_agent: dict,
             _add_day(m, d, requests=1)
             _add_flat(m["by_model"], NO_TOKEN, requests=1)
             _add_flat(m["by_agent"], agent, requests=1)
+            _add_flat(m["by_da"], d + AM_SEP + agent, requests=1)
             _add_flat(m["by_am"], agent + AM_SEP + NO_TOKEN, requests=1)
+            _add_flat(m["by_dam"], d + AM_SEP + agent + AM_SEP + NO_TOKEN, requests=1)
             _add_flat(m["by_dm"], d + AM_SEP + NO_TOKEN, requests=1)
             _add_flat(m["by_sdm"], sid + AM_SEP + d + AM_SEP + NO_TOKEN,
                       requests=1)
             seen.add(d)
+            per_day.setdefault(d, [1, 0, 0, 0.0])
     if seen:
         _add_day(m, min(seen), sessions=1)
-    _attribute_skills(m, sid_skills.get(sid), (s_req, s_in, s_out, s_aiu))
+    _attribute_skills(m, sid_skills.get(sid), {k: tuple(v) for k, v in per_day.items()})
     return True
 
 
-def _scan_session_dir(entry, m: dict, agent: str, cache: dict) -> tuple[dict, tuple]:
+def _scan_session_dir(entry, m: dict, agent: str, cache: dict,
+                      anchor: str | None = None) -> tuple[dict, dict]:
     """One debug-log session: its main log plus every child log it spawned.
 
     Returns the main log's record (for the session date) and the session-wide
-    ``(requests, input, output, aiu)`` totals across main and children.
+    per-day ``date -> (requests, input, output, aiu)`` totals across main and
+    children. Per-day rather than one lump because a session that runs past
+    midnight has to be splittable by the day each request actually landed on.
     """
+    per_day: dict[str, list] = {}
+
+    def _roll(r: dict) -> None:
+        for date, b in r.get("by_day", {}).items():
+            d = per_day.setdefault(date, [0, 0, 0, 0.0])
+            d[0] += b["requests"]
+            d[1] += b["in"]
+            d[2] += b["out"]
+            d[3] += b["aiu"]
+
     mj = os.path.join(entry.path, "main.jsonl")
     rec = billing_or_defer(mj, cache) if os.path.isfile(mj) else {}
     childrefs = rec.get("childrefs", {})
-    s_req, s_in, s_out, s_aiu = apply_billing(m, agent, rec)
+    apply_billing(m, agent, rec, anchor)
+    _roll(rec)
     for key, b in rec.get("by_dm", {}).items():
         _add_flat(m["by_sdm"], entry.name + AM_SEP + key, requests=b["requests"],
                   in_=b["in"], out=b["out"], aiu=b["aiu"],
@@ -262,17 +293,14 @@ def _scan_session_dir(entry, m: dict, agent: str, cache: dict) -> tuple[dict, tu
         else:
             sub = agent
         child = billing_or_defer(cf.path, cache)
-        c_req, c_in, c_out, c_aiu = apply_billing(m, sub, child)
+        apply_billing(m, sub, child, anchor)
+        _roll(child)
         for key, b in child.get("by_dm", {}).items():
             _add_flat(m["by_sdm"], entry.name + AM_SEP + key,
                       requests=b["requests"], in_=b["in"], out=b["out"],
                       aiu=b["aiu"], cached=b.get("cached", 0),
                       cached_req=b.get("cached_req", 0))
-        s_req += c_req
-        s_in += c_in
-        s_out += c_out
-        s_aiu += c_aiu
-    return rec, (s_req, s_in, s_out, s_aiu)
+    return rec, {k: tuple(v) for k, v in per_day.items()}
 
 
 def _scan_workspace(vs_root: str, h: str, fallback: str, out: dict, cache: dict,
@@ -292,7 +320,8 @@ def _scan_workspace(vs_root: str, h: str, fallback: str, out: dict, cache: dict,
                 m = out[sid_repo.get(e.name, fallback)]
                 agent = sid_agent.get(e.name, AGENT_DEFAULT)
                 name_session(m, e.name, sid_summary.get(e.name))
-                rec, totals = _scan_session_dir(e, m, agent, cache)
+                rec, totals = _scan_session_dir(e, m, agent, cache,
+                                                _date_of_path(e.path))
                 _attribute_skills(m, sid_skills.get(e.name), totals)
                 main_by_day = rec.get("by_day", {})
                 sdate = min(main_by_day) if main_by_day else _date_of_path(e.path)

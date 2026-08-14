@@ -79,7 +79,10 @@ def scan_cli(cli_home: str) -> dict[str, dict]:
                      aiu=aiu, cached=cached, cached_req=cached_req)
             for bucket, key in ((out[name]["by_model"], model),
                                 (out[name]["by_agent"], AGENT_CLI),
+                                (out[name]["by_da"], day + AM_SEP + AGENT_CLI),
                                 (out[name]["by_am"], AGENT_CLI + AM_SEP + model),
+                                (out[name]["by_dam"],
+                                 day + AM_SEP + AGENT_CLI + AM_SEP + model),
                                 (out[name]["by_dm"], day + AM_SEP + model),
                                 (out[name]["by_sdm"],
                                  sid + AM_SEP + day + AM_SEP + model)):
@@ -102,7 +105,10 @@ def scan_cli(cli_home: str) -> dict[str, dict]:
             _add_day(out[name], date, requests=1)
             _add_flat(out[name]["by_model"], NO_TOKEN, requests=1)
             _add_flat(out[name]["by_agent"], AGENT_CLI, requests=1)
+            _add_flat(out[name]["by_da"], date + AM_SEP + AGENT_CLI, requests=1)
             _add_flat(out[name]["by_am"], AGENT_CLI + AM_SEP + NO_TOKEN, requests=1)
+            _add_flat(out[name]["by_dam"],
+                      date + AM_SEP + AGENT_CLI + AM_SEP + NO_TOKEN, requests=1)
             _add_flat(out[name]["by_dm"], date + AM_SEP + NO_TOKEN, requests=1)
             _add_flat(out[name]["by_sdm"],
                       sid + AM_SEP + date + AM_SEP + NO_TOKEN, requests=1)

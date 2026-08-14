@@ -4,6 +4,30 @@ Releases are recorded here from 1.0.0 onward. The development that led up to it
 is summarised at the end, as phases rather than versions — those builds never
 shipped to anyone, and listing them as releases would overstate what happened.
 
+## [1.3.0] — 2026-08-14
+
+The date range now moves every panel. Skills, Agents, Tools and Languages used
+to report lifetime figures no matter which days were selected, so a single-day
+view of a skill showed everything that skill had ever cost.
+
+Fixed
+
+- Skills, Agents, Tools and Languages follow the calendar. Those breakdowns
+  were stored with no date attached, so the filter had nothing to cut on and
+  quietly showed the lifetime total instead. Each is now recorded against the
+  day it happened, the same way the model list already was.
+- The per-model breakdown inside an expanded agent row re-scopes with the row
+  above it, so the two agree under a filter rather than only without one.
+
+Changed
+
+- A session that runs past midnight has its credits and tokens split across the
+  days they were actually spent, rather than counted whole against one day.
+- Skill read counts stay on the session's first active day. The source records
+  that a SKILL.md was read but never when, so repeating the count on every day
+  the session touched would have reported more reads than happened. Credits for
+  that skill still split by day; only the read count is anchored.
+
 ## [1.2.1] — 2026-08-05
 
 A scan that hits one unreadable file no longer takes the whole report with it,

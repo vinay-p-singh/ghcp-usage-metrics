@@ -80,7 +80,10 @@ def scan_claude(claude_root: str) -> dict[str, dict]:
                      cached_req=1)
             for bucket, key in ((m["by_model"], model),
                                 (m["by_agent"], AGENT_CLAUDE),
+                                (m["by_da"], date + AM_SEP + AGENT_CLAUDE),
                                 (m["by_am"], AGENT_CLAUDE + AM_SEP + model),
+                                (m["by_dam"],
+                                 date + AM_SEP + AGENT_CLAUDE + AM_SEP + model),
                                 (m["by_dm"], date + AM_SEP + model),
                                 (m["by_sdm"], sid + AM_SEP + date + AM_SEP + model)):
                 _add_flat(bucket, key, requests=1, in_=in_, out=out_,

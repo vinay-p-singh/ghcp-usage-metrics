@@ -98,6 +98,25 @@ class TestSynthetic:
         assert sk["requests"] == 2        # s1's session total (main only, no child)
         assert round(sk["aiu"], 4) == 8.0
 
+    def test_skill_credits_land_on_the_day_they_were_spent(self, projects):
+        """s2 used the obsidian skill and ran across two days: its main log on
+        day1 and its subagent child on day2. Filtering to one day has to show
+        only that day's spend, so the credits split where they happened."""
+        vs = projects["acme/alpha"]["vscode"]
+        d1 = vs["by_ds"][DAY1 + usage._AM_SEP + "obsidian"]
+        d2 = vs["by_ds"][DAY2 + usage._AM_SEP + "obsidian"]
+        assert round(d1["aiu"], 4) == 1.0 and d1["in"] == 50
+        assert round(d2["aiu"], 4) == 2.0 and d2["in"] == 500
+
+    def test_skill_reads_are_never_inflated_by_the_split(self, projects):
+        """Reads carry no timestamp, so they anchor to the session's first active
+        day rather than being repeated on every day it touched."""
+        vs = projects["acme/alpha"]["vscode"]
+        d1 = vs["by_ds"][DAY1 + usage._AM_SEP + "obsidian"]
+        d2 = vs["by_ds"][DAY2 + usage._AM_SEP + "obsidian"]
+        assert (d1["reads"], d1["sessions"]) == (1, 1)
+        assert (d2["reads"], d2["sessions"]) == (0, 0)
+
     def test_tool_counts(self, projects):
         vs = projects["acme/alpha"]["vscode"]
         assert vs["by_tool"]["read_file"] == 1

@@ -46,7 +46,8 @@ function client(days, extra) {
   for (const d in (days || {})) by_day[d] = bucket(days[d]);
   return Object.assign({
     by_day, by_model: {}, by_agent: {}, by_am: {}, by_dm: {}, by_sdm: {},
-    by_skill: {}, by_tool: {}, by_lang: {}, session_names: {}
+    by_da: {}, by_dam: {}, by_skill: {}, by_ds: {}, by_tool: {}, by_dt: {},
+    by_lang: {}, by_dl: {}, session_names: {}
   }, extra || {});
 }
 
