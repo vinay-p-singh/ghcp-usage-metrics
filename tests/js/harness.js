@@ -107,6 +107,8 @@ function sampleDiag() {
                              claude: { requests: 0, no_tokens: 0 } } },
     credit_floor: { floor: null, onsets: {}, never_reports: [],
                     first_day: "2026-07-01", days_before: 0 },
+    source: { requested: "auto", effective: "auto", debug_sessions: 2,
+              chat_credit_first: null },
     no_token_rows: []
   };
 }
@@ -134,6 +136,17 @@ function load(opts) {
         addEventListener() {}, removeEventListener() {},
         addListener() {}, removeListener() {}
       }));
+      // Pass `vscode: true` to boot as if inside the extension's webview;
+      // everything posted to the host is captured on window.__posted.
+      if (o.vscode) {
+        const posted = [];
+        window.__posted = posted;
+        window.acquireVsCodeApi = () => ({
+          postMessage: m => posted.push(m),
+          getState: () => undefined,
+          setState: () => undefined
+        });
+      }
       window.addEventListener("error", e => errors.push(String(e.error || e.message)));
     }
   });

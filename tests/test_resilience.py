@@ -75,10 +75,10 @@ class TestScanContainment:
                         json.dumps({"folder": "file:///C:/proj/beta"}))
         real = vs._scan_workspace
 
-        def boom(vs_root, h, fallback, out, cache, maps, seen_sids):
+        def boom(vs_root, h, fallback, out, cache, maps, seen_sids, source="auto"):
             if h == "ws2":
                 raise RuntimeError("workspace on fire")
-            return real(vs_root, h, fallback, out, cache, maps, seen_sids)
+            return real(vs_root, h, fallback, out, cache, maps, seen_sids, source)
 
         monkeypatch.setattr(vs, "_scan_workspace", boom)
         out = vs.scan_vscode([(paths["vs_root"], paths["vs_db"])], paths["cache"])

@@ -92,10 +92,10 @@ async function runDiagnostics(context: vscode.ExtensionContext): Promise<void> {
   } else {
     ch.appendLine("No token/AIU data is retained locally for these sessions.");
     ch.appendLine(
-      "Tokens & AI-credits come from fields Copilot Chat writes into its own request " +
-        "logs (debug-logs main.jsonl / chatSessions). Older sessions get trimmed and " +
-        "debug logs rotate, so only request counts survive. This is NOT a log-level " +
-        "setting \u2014 new Copilot activity will populate tokens going forward."
+        "Saved chat sessions are still readable, but they trim older turns. For richer " +
+          "future coverage, set github.copilot.chat.agentDebugLog.fileLogging.enabled " +
+          "to true in VS Code Settings JSON, reload the window, and start a new chat. " +
+          "The setting cannot restore logs that were never written."
     );
   }
   ch.show(true);
@@ -175,12 +175,15 @@ function runCapture(py: string, root: string, args: string[]): Promise<string> {
 
 // Run `python usage.py <args>` in the repo root. Resolves once out/dashboard.html is
 // (re)written; rejects with the captured stderr on failure.
-function runExtractor(root: string, args: string[] = []): Promise<void> {
+function runExtractor(root: string, args: string[] = [], sourceOverride?: string): Promise<void> {
   const py = setting<string>("pythonPath", "python");
+  // Applied here rather than per call site so every scan reads the same store.
+  const source = sourceOverride ?? setting<string>("source", "auto");
+  const pick = source && source !== "auto" ? ["--source", source] : [];
   return new Promise((resolve, reject) => {
     cp.execFile(
       py,
-      ["usage.py", ...args],
+      ["usage.py", ...pick, ...args],
       { cwd: root, windowsHide: true, maxBuffer: 64 * 1024 * 1024 },
       (err, _stdout, stderr) => {
         if (err) {
@@ -289,22 +292,51 @@ function setHtml(target: vscode.WebviewPanel, html: string): void {
   target.webview.html = html;
 }
 
-async function refreshInto(root: string): Promise<void> {
+async function refreshInto(root: string, sourceOverride?: string): Promise<void> {
   await vscode.window.withProgress(
     { location: vscode.ProgressLocation.Window, title: "Copilot Usage: scanning Copilot logs…" },
-    async () => runExtractor(root)
+    async () => runExtractor(root, [], sourceOverride)
   );
   sendReport(root, "full");
 }
 
-async function safeRefresh(root: string): Promise<void> {
+async function safeRefresh(root: string, sourceOverride?: string): Promise<void> {
   if (!panel) {
     return;
   }
   try {
-    await refreshInto(root);
+    await refreshInto(root, sourceOverride);
   } catch (e: unknown) {
     await reportFailure(root, "the refresh could not finish", e);
+  }
+}
+
+// Which store to read is decided while scanning, so choosing it in the report
+// has to re-run the extractor. Persisting it too means the next scan the
+// extension starts on its own agrees with what the report last showed.
+async function setSource(root: string, source: string): Promise<void> {
+  if (!["auto", "debug", "sessions"].includes(source)) {
+    return;
+  }
+  await vscode.workspace
+    .getConfiguration("ghcpUsage")
+    .update("source", source, vscode.ConfigurationTarget.Global);
+  await safeRefresh(root, source);
+}
+
+async function enableDebugLogs(): Promise<void> {
+  const config = vscode.workspace.getConfiguration("github.copilot.chat");
+  await config.update(
+    "agentDebugLog.fileLogging.enabled",
+    true,
+    vscode.ConfigurationTarget.Global
+  );
+  const pick = await vscode.window.showInformationMessage(
+    "Copilot agent debug file logging is enabled. Reload VS Code, then start a new chat to create log data.",
+    "Reload Window"
+  );
+  if (pick === "Reload Window") {
+    await vscode.commands.executeCommand("workbench.action.reloadWindow");
   }
 }
 
@@ -349,12 +381,16 @@ async function openDashboard(context: vscode.ExtensionContext): Promise<void> {
     pendingData = undefined;
   });
   panel.webview.onDidReceiveMessage(
-    async (msg: { type?: string }) => {
+    async (msg: { type?: string; source?: string }) => {
       if (msg?.type === "ready") {
         webviewReady = true;
         flushPending();
       } else if (msg?.type === "refresh") {
         await safeRefresh(root);
+      } else if (msg?.type === "setSource") {
+        await setSource(root, String(msg.source));
+      } else if (msg?.type === "enableDebugLogs") {
+        await enableDebugLogs();
       } else if (msg?.type === "diagnostics") {
         await runDiagnostics(context);
       }

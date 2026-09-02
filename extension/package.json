@@ -1,8 +1,8 @@
 {
   "name": "ghcp-usage-metrics",
-  "displayName": "Copilot Usage & AIU Metrics (unofficial)",
-  "description": "Local dashboard of your GitHub Copilot token & AI-credit (AIU) usage per project, model, harness, agent, skill and day, with cost ranking, strengths and forecasting. Runs the bundled Python extractor (usage.py) and hosts its report in a webview. Refresh re-scans your logs live. Nothing leaves your machine. Not affiliated with, endorsed by, or supported by Microsoft or GitHub.",
-  "version": "1.3.0",
+  "displayName": "Copilot AI Credits & Usage Metrics (unofficial)",
+  "description": "Local dashboard of your GitHub Copilot AI-credit and token usage per project, model, harness, agent, skill and day, with cost ranking, strengths and forecasting. Runs the bundled Python extractor (usage.py) and hosts its report in a webview. Refresh re-scans your logs live. Nothing leaves your machine. Not affiliated with, endorsed by, or supported by Microsoft or GitHub.",
+  "version": "1.6.0",
   "publisher": "vinay-p-singh",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -55,7 +55,7 @@
       }
     ],
     "configuration": {
-      "title": "Copilot Usage & AIU Metrics",
+      "title": "Copilot AI Credits & Usage Metrics",
       "properties": {
         "ghcpUsage.pythonPath": {
           "type": "string",
@@ -72,6 +72,17 @@
           "default": 10,
           "minimum": 1,
           "description": "On a first run with no previous report, scan only logs from the last N days so the dashboard appears quickly. The complete history is then loaded in the background."
+        },
+        "ghcpUsage.source": {
+          "type": "string",
+          "default": "auto",
+          "enum": ["auto", "debug", "sessions"],
+          "enumDescriptions": [
+            "Prefer Copilot Chat's request logs and let VS Code's saved sessions fill in what they no longer hold. Falls back to saved sessions on machines that have no request logs.",
+            "Read Copilot Chat's request logs only. Sessions the logs have rotated away are left out.",
+            "Read VS Code's saved sessions only. Works without request logs, but saved sessions keep only the most recent turns and carry an AI-credit figure only from the date VS Code began writing one."
+          ],
+          "description": "Which local store to build the report from."
         }
       }
     }

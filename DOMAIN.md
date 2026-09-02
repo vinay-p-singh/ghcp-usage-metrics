@@ -32,6 +32,7 @@ disagreement is recorded rather than hidden.
 | **Miss tokens** | Input that was not served from cache: `in - cached` | Derived when displayed, never stored — storing both halves invites them to disagree. |
 | **Coverage counter** | `cached_req`: how many of a bucket's requests reported a cache figure | Cache reporting began part-way through the history, so "not reported" must stay distinct from "nothing cached". |
 | **Session name** | The short summary a session store recorded for a session | Present for ~69% of sessions; the rest were purged. Absent means absent — shown by id. |
+| **Saved summary request** | A separate summarization model call recorded under a saved request's `result.metadata.summaries[]` | Carries model, input, output, and cache usage but no timestamp or credit field. It inherits the parent request's recorded day and contributes zero credits. |
 | **Credit onset** | The first date a harness reported any AI credits | VS Code 2026-05-17, Copilot CLI 2026-07-09. Claude Code has none and never will. |
 | **Coverage floor** | The latest onset among harnesses that report credits at all | Below it a total is arithmetically right and materially incomplete. Computed, never hardcoded. |
 | **Dimension** | A way of grouping requests: by day, model, agent, skill, tool, language | A projection of the same facts, not separate data. |
@@ -108,13 +109,19 @@ Status is either the test that enforces it, or `NOT ENFORCED`.
 | INV-29 | `cached` never exceeds `in`, and `cached_req` never exceeds `requests` — cache is a subset of input, not an addition | `test_invariants`, `test_snapshot_live` |
 | INV-30 | A request that reported no cache figure is not recorded as zero cache; it raises `requests` without raising `cached_req` | `test_invariants` |
 | INV-31 | A session name exists only where a session store recorded one, capped at 120 characters, and never exceeds the sessions the harness counted | `test_invariants`, `test_snapshot_live` |
-| INV-32 | A retained chat session's tokens are read whether the source wrote them on the request or under `result.metadata` | `test_invariants` |
+| INV-32 | A retained chat session's tokens are read whether the source wrote them on the request or under `result.metadata`; its recorded `resolvedModel` and `modelState.completedAt` are used when the top-level identity fields are absent | `test_invariants`, `test_source_selection` |
 | INV-33 | The coverage floor is the latest credit onset among reporting harnesses; a harness that never reports credits cannot hold it back, and no credits anywhere yields no floor rather than a guess | `test_quick_and_diagnostics`, `tests/js/qualify.test.js` |
 | INV-34 | Every harness buckets a request on its **UTC** day. A source timestamp is normalised through `_any_date`, never sliced as a raw string, so a local-midnight boundary cannot move a request between days | `test_invariants` |
 | INV-3 | No breakdown carries a session count; sessions are counted by distinct `by_sdm` key, never summed | `test_contract`, `test_invariants`, `test_extract_synthetic` |
 | INV-4 | Only declared composite dimensions use the separator, with exactly the declared number of parts | `test_contract` |
 | INV-5 | A project carries a name and exactly one record per harness, each with every dimension | `test_contract` |
-| INV-6 | A chat session already covered by a debug log is skipped, never counted twice | `test_extract_synthetic` |
+| INV-6 | A session held in both stores is counted once, from the copy that kept more of it; the other is discarded whole, never added and never half-taken | `test_store_merge`, `test_extract_synthetic` |
+| INV-39 | A saved copy reporting no credits cannot displace a request log that reported some, however many tokens it lists | `test_store_merge` |
+| INV-40 | A unique global empty-window session is counted; an ID already resolved from a workspace store is never counted again | `test_source_selection` |
+| INV-41 | Each saved summary usage object is a separate request on its parent request's day; its recorded tokens/cache are kept and its credits remain zero when none were recorded | `test_source_selection` |
+| INV-36 | The scan records which store it read. `auto` settles to saved sessions only when no request log exists; an explicitly requested store is never overridden | `test_source_selection` |
+| INV-37 | The date from which saved sessions carry a credit figure is measured from the logs, never assumed, and is reported as absent when no saved session carries one | `test_source_selection` |
+| INV-38 | A tool call the log did not timestamp is dated from its own session, never from the clock at scan time | `test_scan_units` |
 | INV-7 | A subagent's tokens are attributed to the subagent, never to its parent | `test_extract_synthetic` |
 | INV-8 | A memoised log is used even when it falls outside the quick-scan window | `test_quick_and_diagnostics` |
 | INV-9 | Requests that could not be parsed are counted as skipped, never as zero-usage requests | `test_quick_and_diagnostics` |
@@ -178,6 +185,37 @@ recorded number to match.
 Measured on 2026-08-05 against a stated 47,752 credits for the cycle opening
 2026-07-31: we accounted for 43,387 (90.9%), on a machine the reader confirmed
 was their only one.
+
+### Neither VS Code store is complete, and they truncate on different axes
+
+Copilot Chat's request logs record every model call but rotate away. VS Code's
+saved sessions survive much longer but keep only the most recent turns. So the
+question "which store is right" has no fixed answer: on a machine sampled in
+August 2026, 36 of 46 sessions present in both stores retained a single turn in
+the saved copy, while four long sessions had lost so many calls from the request
+log that the saved copy reported several times more credits.
+
+Where both stores are complete they agree exactly — five sessions matched to the
+decimal — which is what establishes that `copilotCredits` and
+`copilotUsageNanoAiu` are the same measure and not two different ones.
+
+`auto` reads both and keeps, per session, whichever copy recorded more credits
+— the one that lost less. Ties keep the request log, which carries per-call
+detail the saved copy has no equivalent for. Zero credits in a saved copy never
+wins on its own, because saved sessions carried no credit figure at all before
+VS Code began writing one, and unrecorded must not read as cheaper.
+
+The swap has a price, and it is paid knowingly: a session taken from the saved
+copy loses request-log-only cache detail and subagent attribution, while its
+request count combines retained parent calls and any separately recorded summary
+calls rather than the request log's exact call sequence. Saved sessions still
+provide tool rounds and, where present, summary-call cache usage. This is accepted
+because understating credits by an order of magnitude is the worse error in a
+spend report. `diagnostics.json` → `source.sessions_from_saved` counts how often
+it happened, so the rotation stays visible rather than silent.
+
+On the machine this was built on the rule moved 6 of 220 sessions and recovered
+63,813 credits (+20.6%), while request counts fell by 451.
 
 ### The coverage floor is a first-sighting rule, not a completeness rule
 

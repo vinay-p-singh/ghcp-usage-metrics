@@ -34,6 +34,41 @@ That rewrites both `out/projects.json` and `out/dashboard.html` and prints a
 one-line total. It takes a few seconds and needs no arguments. Otherwise reuse
 the existing snapshot rather than rescanning on every question.
 
+## When the machine has no Copilot Chat request logs
+
+VS Code holds the same sessions in two places, and neither is complete. Request
+logs (`debug-logs/*/main.jsonl`) carry every model call but rotate away; saved
+sessions (`chatSessions/`) survive far longer but keep only the most recent
+turns of each. `python usage.py` prefers the request log and lets saved sessions
+cover what it no longer holds — and if the machine has no request logs at all,
+it falls back to saved sessions on its own and says so in a banner.
+
+To force one store:
+
+```pwsh
+python usage.py --source sessions   # saved sessions only
+python usage.py --source debug      # request logs only
+```
+
+`--source sessions` is what a machine without request logs is really reporting,
+so use it to reproduce someone else's view. Everything downstream is unchanged:
+`query.py` still gives the full project-wise breakdown.
+
+**Say this whenever a sessions-only report is being discussed**, because the
+numbers are a floor and nothing in them shows it:
+
+- Saved sessions only carry an AI-credit figure from the date VS Code began
+  writing one. `out/diagnostics.json` → `source.chat_credit_first` holds that
+  date, measured from the logs. Earlier days have requests and tokens, no credits.
+- The calendar shows one saved-session coverage note instead of per-day warning
+  badges in this mode. Missing coverage is systemic here; Diagnostics retains
+  the detailed request and token-payload counts.
+- Only the most recent turns of each session survive, so request counts and
+  totals are lower than the account was actually billed.
+- On the machine this was built on, saved-sessions-only reported roughly a third
+  of the credits the default scan found. Treat the gap as coverage, not as a
+  discrepancy to explain away.
+
 ## Query
 
 ```pwsh

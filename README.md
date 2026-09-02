@@ -28,10 +28,34 @@ truth**. `usage.py` does all the scanning and math; the HTML template is just a
 view; the VS Code extension only *runs* the Python and shows the result. That
 keeps one place to reason about the numbers.
 
+### Choose the VS Code data source
+
+In the extension dashboard, open **Config** (the gear in the toolbar) and use
+**VS Code data source**:
+
+- **Automatic (recommended)** compares agent debug logs with saved chat
+   sessions for each session and keeps the fuller copy.
+- **Agent debug logs only** uses the richest per-call source, including model,
+   token, tool and subagent detail, but omits sessions after those logs rotate.
+- **Saved chat sessions only** works without debug logs, but VS Code trims older
+   turns and older sessions may not carry AI-credit fields.
+
+If no agent debug logs exist, the dashboard shows **Enable logging**. It sets
+`github.copilot.chat.agentDebugLog.fileLogging.enabled` to `true`; reload VS
+Code and start a new chat before refreshing the dashboard. The setting improves
+new activity only and cannot recreate logs that were never written.
+
+In a generated browser report the selector is read-only because a static HTML
+file cannot run Python. Rebuild it explicitly instead:
+
+```powershell
+python usage.py --source auto       # or debug / sessions
+```
+
 ```mermaid
 flowchart LR
     subgraph Logs["Local Copilot logs"]
-        VS["VS Code<br/>debug-logs + chatSessions"]
+      VS["VS Code<br/>debug-logs + workspace/global chatSessions"]
         CLI["Copilot CLI<br/>session-store.db"]
         CL["Claude Code<br/>*.jsonl"]
     end
@@ -97,7 +121,7 @@ Eight views over the same filtered scope:
 | View           | Shows                                                                    |
 | -------------- | ------------------------------------------------------------------------ |
 | **Overview**   | Credits per day, top projects, and a per-project table that expands into models, agents and tools. |
-| **Calendar**   | A day grid you can hover for detail, click to filter to one day, or drag across for a range. |
+| **Calendar**   | A day grid you can hover for detail, click to filter to one day, or drag across for a range. Sessions-only reports use one coverage note instead of repeating the same warning on most days. |
 | **Breakdown**  | Requests by harness, credits by model, top projects, and code output by language. |
 | **Agents**     | Base harnesses and `runSubagent` subagents ranked by spend, with cost-per-request signals. |
 | **Skills**     | Which `SKILL.md` files actually got read, and what the sessions that used them cost. |
@@ -188,7 +212,7 @@ approximate one. Worth knowing before you trust a number:
 | Session retention is short      | VS Code keeps roughly the 70 most recent sessions in its store, so older agent and skill runs are purged and unrecoverable. Session names exist for about two thirds of sessions; the rest show their id. |
 | Some breakdowns ignore dates    | Per-day buckets carry no agent or skill dimension, so those breakdowns are lifetime totals. Models are dated and do follow `--since` / `--until`. |
 | Skill totals overlap            | A session that invoked three skills counts its tokens toward all three, so skill AIU does not sum to the overall total. |
-| Logs rotate                     | VS Code debug logs are trimmed and saved chat sessions keep only some requests, so older days are sparse. Real, recorded, and thin. |
+| Logs rotate                     | VS Code debug logs are trimmed and saved workspace/no-workspace sessions keep only some requests, so older days are sparse. Recorded summary calls add their real tokens and cache usage, but zero credits when the saved object records none. |
 | No cloud reconciliation         | Enterprise-managed accounts cannot reach GitHub's org metrics or personal billing APIs. Local logs are the only source. |
 
 ## Project layout

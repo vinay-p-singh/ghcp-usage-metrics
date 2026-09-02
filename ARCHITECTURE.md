@@ -188,7 +188,7 @@ a plausible default to fill a hole, stop. Surface the hole.
 ```mermaid
 flowchart TB
   subgraph L["Local logs (read-only)"]
-    V["VS Code<br/>debug-logs + chatSessions + session-store.db"]
+    V["VS Code<br/>debug-logs + workspace/global chatSessions + session-store.db"]
     C["Copilot CLI<br/>~/.copilot/*.db"]
     K["Claude Code<br/>~/.claude/projects/*.jsonl"]
   end
@@ -357,12 +357,15 @@ Three files matter, and they disagree about what they keep:
 | Source                       | Holds                                    | Retention                     |
 | ---------------------------- | ---------------------------------------- | ----------------------------- |
 | `debug-logs/*/main.jsonl`    | Real credits + tokens per request        | Rotates; ~3 months            |
-| `chatSessions/*.json\|jsonl` | Session metadata, some request bodies    | Much longer; back to January  |
+| `chatSessions/*.json\|jsonl` | Workspace session metadata and some request bodies | Much longer; back to January |
+| `globalStorage/emptyWindowChatSessions/*` | Chats created without an open workspace | Much longer; no workspace hash |
 | `session-store.db`           | Agent names, skill file reads            | ~70 most recent sessions      |
 
-The scanner reads debug logs first and records which session IDs it saw, then
-reads chat sessions and **skips any ID already covered**. Without that dedup the
-overlap would double-count roughly 118 sessions.
+The scanner measures request-log and workspace-saved copies independently, then
+keeps whichever copy retained more of each session. It reads the global
+empty-window store last: unique IDs are added, while IDs already resolved from a
+workspace store are skipped. Without those two deduplication rules the overlap
+would count the same conversation more than once.
 
 Two findings worth carrying:
 
@@ -376,6 +379,11 @@ Two findings worth carrying:
   request bodies still carries `creationDate` / `lastMessageDate`. Those light up
   the calendar day with a floor of one request and **zero tokens** — literally
   true, and the reason some projects show requests but no credits.
+- **Saved summaries are separate model calls.** Entries under
+  `result.metadata.summaries[]` carry their own model, round ID, input, output,
+  and cached-token count. They are counted as requests on their parent request's
+  recorded day. They add zero credits because the saved summary records no
+  credit field; filling one from a rate would be estimation.
 
 ### Copilot CLI
 

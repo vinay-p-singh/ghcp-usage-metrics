@@ -4,6 +4,107 @@ Releases are recorded here from 1.0.0 onward. The development that led up to it
 is summarised at the end, as phases rather than versions — those builds never
 shipped to anyone, and listing them as releases would overstate what happened.
 
+## [1.6.0] — 2026-09-02
+
+This release reads more of VS Code's saved-session evidence on machines where
+agent debug logs are unavailable or incomplete.
+
+Added
+
+- Saved chats created without an open workspace are now read from
+  `globalStorage/emptyWindowChatSessions`. Unique sessions are included and IDs
+  already resolved from a workspace store remain counted once.
+- Separate summarization model calls recorded under
+  `result.metadata.summaries[]` now contribute their recorded model, input,
+  output, and cached-token usage.
+
+Fixed
+
+- A completed saved request is no longer dropped when VS Code records its model
+  and timestamp only as `result.metadata.resolvedModel` and
+  `modelState.completedAt`.
+- Sessions-only reports replace repetitive per-day calendar warnings with one
+  persistent coverage note. Request-log and merged reports retain per-day
+  markers, where a thin day remains an exceptional signal.
+
+Notes
+
+- Saved summary calls inherit their parent request's recorded UTC day. They add
+  zero AI credits because the saved object carries no credit field of its own;
+  the extension does not estimate one.
+
+## [1.5.0] — 2026-08-31
+
+This release makes the local data source visible and gives a machine without
+Copilot agent debug logs a direct path to better future coverage.
+
+Added
+
+- A **VS Code data source** control in Config with three explicit modes:
+  **Automatic** (recommended), **Agent debug logs only**, and **Saved chat
+  sessions only**. Changing it inside the extension re-runs the extractor.
+- A first-screen notice when no agent debug-log sessions are present. It names
+  `github.copilot.chat.agentDebugLog.fileLogging.enabled`, explains that a
+  window reload and a new chat are required, and offers an **Enable logging**
+  action inside the extension.
+- A permanent **Agent debug logs** panel in Diagnostics, so the same explanation
+  is still findable after the notice has been dismissed. It reports the enabled
+  case too — how many sessions were read, how many had rotated far enough that
+  the saved copy was used instead, and that rotation is the usual reason an
+  older day looks thin.
+- A clear handoff when `web/dashboard.html` is opened directly: it now points to
+  the assembled `out/dashboard.html` instead of looking like a broken page.
+
+Changed
+
+- Day markers on the calendar now name the harness that left the day thin and
+  why, instead of only reporting that something was missing. A day fed by more
+  than one harness says which one dominates rather than implying a single cause.
+
+Notes
+
+- Agent debug logs retain the richest per-call model, token, tool and subagent
+  detail, but they rotate. Automatic mode therefore compares both local copies
+  of each session and keeps the fuller one.
+- Enabling logging affects new activity only; it cannot recreate logs that were
+  never written.
+
+## [1.4.0] — 2026-08-20
+
+VS Code keeps every session twice and truncates each copy differently. This
+release stops assuming one of them is always the better record, and says which
+one it read.
+
+Added
+
+- `ghcpUsage.source` chooses the local store to build the report from: `auto`
+  (default), `debug` for Copilot Chat's request logs only, or `sessions` for
+  VS Code's saved sessions only. `auto` falls back to saved sessions on its own
+  when a machine has no request logs, so the tool still reports there.
+- The same choice as a dropdown in the report's own Quick settings. It shows the
+  store the figures on screen were actually built from, and changing it re-reads
+  your logs rather than filtering what is already loaded — outside the extension
+  it is disabled, because only the host can run the extractor again.
+- A banner naming the store the report was built from, what it leaves out, and
+  the date before which saved sessions carry no credit figure at all. That date
+  is measured from your logs rather than assumed.
+
+Fixed
+
+- A session is now taken from whichever store kept more of it. Request logs
+  rotate away mid-session, and preferring them outright discarded the fuller
+  saved copy — on the machine this was developed against that was 6 sessions and
+  about 20% of the credit total.
+- One name for the metric throughout: AI credits. The dashboard previously mixed
+  "AIU", "AI Credits (AIU)" and "Credits" for the same number.
+
+Notes
+
+- A session taken from its saved copy loses that session's cache figures, tool
+  calls and subagent attribution, and its request count becomes turns rather
+  than model calls. `out/diagnostics.json` → `source.sessions_from_saved` counts
+  how often that happened.
+
 ## [1.3.0] — 2026-08-14
 
 The date range now moves every panel. Skills, Agents, Tools and Languages used

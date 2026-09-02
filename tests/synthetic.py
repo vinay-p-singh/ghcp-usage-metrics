@@ -63,12 +63,23 @@ def build_vscode(root: str, db_path: str) -> None:
     write(os.path.join(dbg, "s2", "runSubagent-Researcher-c1.jsonl"),
           billing_line(ms(2026, 5, 3), 500, 100, "claude", 2_000_000_000) + "\n")
 
-    # chatSessions: s1 must be SKIPPED (already in debug-logs); s3 is new/older
+    # A tool call with no timestamp of its own is dated from the session
+    # directory. Left alone that is whenever the fixture was built, which bakes
+    # the current date into the golden master and fails the day after.
+    anchor = ms(2026, 5, 2) / 1000
+    for sid in ("s1", "s2"):
+        os.utime(os.path.join(dbg, sid), (anchor, anchor))
+
+    # chatSessions: s1 also has a request log, and that log kept more of it, so
+    # the saved copy must not be counted. Its token counts are deliberately
+    # absurd so that counting it anyway is obvious rather than subtle. It
+    # carries no credit figure at all, as every saved session did before VS Code
+    # began writing one -- which is also why the request log wins here.
     chat = os.path.join(ws, "chatSessions")
     write(os.path.join(chat, "s1.json"), json.dumps({
         "sessionId": "s1",
         "requests": [{"timestamp": ms(2026, 5, 2), "promptTokens": 9999,
-                      "completionTokens": 9999, "copilotCredits": 99.0,
+                      "completionTokens": 9999, "copilotCredits": 0.0,
                       "modelId": "copilot/gpt-x"}]}))
     write(os.path.join(chat, "s3.json"), json.dumps({
         "sessionId": "s3", "creationDate": ms(2026, 5, 1),

@@ -1,3 +1,8 @@
+// The extension host, when this report is being shown inside it. Declared up
+// here because anything that can only work with a host has to be able to ask
+// before the first render, not just when a button is clicked.
+const vscodeApi = (typeof acquireVsCodeApi !== "undefined") ? acquireVsCodeApi() : null;
+
 // ---- theme (mode + accent) ----
 const themeBtn = document.getElementById("themeBtn");
 const themePop = document.getElementById("themePop");
@@ -46,7 +51,7 @@ document.addEventListener("click", (e) => {
 
 // ---- export CSV (current in-scope per-project rows) ----
 document.getElementById("csvBtn").addEventListener("click", () => {
-  const rows = [["Project", "Sessions", "Requests", "AIU", "Input", "Output"]];
+  const rows = [["Project", "Sessions", "Requests", "AI credits", "Input", "Output"]];
   for (const p of [...curPerProj].sort((a, b) => b.aiu - a.aiu))
     rows.push([p.name, p.sessions, p.requests, p.aiu, p.in, p.out]);
   const csv = rows.map(r => r.map(c => {
@@ -98,9 +103,29 @@ const qs = {
   hideEmpty: document.getElementById("qsHideEmpty"),
   diag: document.getElementById("qsDiag"),
   floor: document.getElementById("qsFloor"),
-  floorOn: document.getElementById("qsFloorOn")
+  floorOn: document.getElementById("qsFloorOn"),
+  source: document.getElementById("qsSource")
 };
 const qsStatus = document.getElementById("qsStatus");
+
+// The store the reader just picked, until a report built from it arrives. The
+// scan runs in the host and takes seconds, so redrawing this form in the
+// meantime would revert the control while the numbers beside it are already
+// changing.
+let sourcePending = null;
+
+// The two controls that report the run rather than a stored preference, so a
+// pushed report can refresh them without disturbing anything being edited.
+function syncReportedSettings() {
+  const cf = (DIAG && DIAG.credit_floor) || {};
+  const floor = cf.floor || "";
+  qs.floor.value = floor
+    ? `${floor.slice(0, 8)}01  (credits complete from ${floor})`
+    : "none \u2014 no credits recorded yet";
+  qs.floorOn.disabled = !floor;
+  qs.source.value = sourcePending || sourceChoice(DIAG);
+}
+
 function syncQuickSettings() {
   qs.since.value = CFG.since || "";
   qs.until.value = CFG.until || "";
@@ -112,15 +137,29 @@ function syncQuickSettings() {
   qs.auto.value = CFG.autoRefreshMinutes || 0;
   qs.hideEmpty.checked = hideEmptyOn();
   qs.diag.checked = diagnosticsOn();
-  // Derived from the logs, so it is reported rather than offered for editing.
-  const cf = (DIAG && DIAG.credit_floor) || {};
-  const floor = cf.floor || "";
-  qs.floor.value = floor
-    ? `${floor.slice(0, 8)}01  (credits complete from ${floor})`
-    : "none \u2014 no credits recorded yet";
   qs.floorOn.checked = CFG.startAtCreditFloor !== false;
-  qs.floorOn.disabled = !floor;
+  // Derived from the logs, so these are reported rather than offered for editing.
+  syncReportedSettings();
+  qs.source.disabled = !vscodeApi;
+  if (!vscodeApi) {
+    qs.source.title = "Re-run usage.py with --source auto, debug, or sessions";
+    document.getElementById("qsSourceNote").innerHTML =
+      "This generated report cannot run the extractor. Re-run <code>python usage.py " +
+      "--source auto|debug|sessions</code>, then reopen <code>out/dashboard.html</code>.";
+  }
 }
+
+// Which store to read is decided while scanning, so this cannot be applied in
+// the browser: the host has to run the extractor again. Outside the extension
+// the control is disabled rather than left looking usable.
+qs.source.addEventListener("change", () => {
+  if (!vscodeApi) {
+    return;
+  }
+  sourcePending = qs.source.value;
+  setStatus(qsStatus, "ok", "Re-reading your logs\u2026");
+  vscodeApi.postMessage({ type: "setSource", source: qs.source.value });
+});
 function applyCfgEverywhere() {
   cfgJson.value = cfgTextFromCfg();
   syncQuickSettings();
@@ -182,7 +221,6 @@ document.getElementById("cfgDownload").addEventListener("click", () => {
 });
 
 // refresh: re-extract live inside the VS Code panel, else reload the static report
-const vscodeApi = (typeof acquireVsCodeApi !== "undefined") ? acquireVsCodeApi() : null;
 const refreshBtn = document.getElementById("refreshBtn");
 const refState = document.getElementById("refState");
 refreshBtn.title = vscodeApi

@@ -28,7 +28,7 @@ function markActivePreset() {
 function renderDaily(daily, stats) {
   // one solid bar per active day; contiguous "active days" strip (no gaps).
   const dates = Object.keys(daily).filter(d => (daily[d] || 0) > 0.0001).sort();
-  if (!dates.length) { dailyChart.innerHTML = '<div class="muted">No AIU in range.</div>'; return; }
+  if (!dates.length) { dailyChart.innerHTML = '<div class="muted">No AI credits in range.</div>'; return; }
   const max = Math.max(...dates.map(d => daily[d])) || 1;
   const W = 600, H = cssNum("--chart-h", 84), padT = 6, padB = 4, MINH = 2.5;
   const bw = W / dates.length;

@@ -4,9 +4,10 @@ Three sources feed this, in order of richness:
 
   debug-logs/<sid>/main.jsonl   full per-request tokens and credits, but rotated
   debug-logs/<sid>/runSubagent-*.jsonl  a named subagent's OWN tokens
-  chatSessions/*.json|.jsonl    retained far longer, but trimmed of most request
-                                bodies -- used only for sessions the debug-logs
-                                no longer hold, so nothing is counted twice
+    chatSessions/*.json|.jsonl    retained far longer, but trimmed of most request
+                                                                bodies -- compared per session with request logs
+    emptyWindowChatSessions/*     saved chats created without an open workspace;
+                                                                IDs already seen above are skipped
 
 Only recorded values are used. A session whose body was trimmed still lights up
 its activity day with a floor of one real interaction, because the session
@@ -25,9 +26,12 @@ from collections import defaultdict
 from ghcp.billing import (apply_billing, billing_or_defer, load_cache, prewarm,
                           save_cache)
 from ghcp.constants import AGENT_DEFAULT, AM_SEP, NO_TOKEN, RUNSUBAGENT_PREFIX
-from ghcp.diagnostics import diag_err, guarded, src
+from ghcp.diagnostics import (diag_err, guarded, note_chat_credit,
+                             note_debug_session, note_source, note_store_swap,
+                             resolve_source, source_rec, src)
 from ghcp.jsonl import _langs_from_response, _reconstruct_jsonl
-from ghcp.model import _add_day, _add_flat, _metrics, name_session
+from ghcp.model import (_add_day, _add_flat, _metrics, absorb, coverage_score,
+                        name_session)
 from ghcp.naming import project_name, repo_slug, uri_to_path
 from ghcp.normalize import (_any_date, _date_of_path, _norm_agent, _norm_model,
                             _utc_date_ms)
@@ -155,13 +159,38 @@ def _attribute_skills(m: dict, skills: dict | None, per_day: dict) -> None:
             bucket["sessions"] += 1
 
 
+def _add_saved_request(m: dict, sid: str, date: str, agent: str, model: str,
+                       in_: int, out: int, aiu: float = 0.0,
+                       cached: int = 0, cached_req: int = 0) -> None:
+    _add_day(m, date, requests=1, in_=in_, out=out, aiu=aiu,
+             cached=cached, cached_req=cached_req)
+    for bucket, key in (
+            (m["by_model"], model),
+            (m["by_agent"], agent),
+            (m["by_da"], date + AM_SEP + agent),
+            (m["by_am"], agent + AM_SEP + model),
+            (m["by_dam"], date + AM_SEP + agent + AM_SEP + model),
+            (m["by_dm"], date + AM_SEP + model),
+            (m["by_sdm"], sid + AM_SEP + date + AM_SEP + model)):
+        _add_flat(bucket, key, requests=1, in_=in_, out=out, aiu=aiu,
+                  cached=cached, cached_req=cached_req)
+
+
 def scan_chat_file(cf: str, out: dict, sid_repo: dict, sid_agent: dict,
                    sid_skills: dict, seen_sids: set, fallback: str,
-                   hash_dbg: set, sid_summary: dict | None = None) -> bool:
-    """Add a chatSessions file's real requests to ``out`` when the session is NOT
-    already covered by a (richer) debug-log. ``copilotCredits`` == AIU. These
-    retained sessions reach further back than the rotated debug-logs and carry
-    tools + code-fence languages. Returns False when the file could not be read."""
+                   sid_summary: dict | None = None,
+                   skip_sids: set[str] | None = None) -> str | None:
+    """Add one chatSessions file's real requests to ``out``.
+
+    ``copilotCredits`` is the same measure as the request log's
+    ``copilotUsageNanoAiu`` -- where both stores kept a session whole they agree
+    exactly. These saved sessions reach further back than the rotated request
+    logs and carry tools, code-fence languages, and separate summarization calls
+    with recorded token/cache usage but no credit field of their own.
+
+    Returns the session id it read, so the caller can weigh this copy against a
+    request log of the same session; None when the file could not be read.
+    """
     if cf.endswith(".jsonl"):
         data = _reconstruct_jsonl(cf)
     else:
@@ -170,13 +199,13 @@ def scan_chat_file(cf: str, out: dict, sid_repo: dict, sid_agent: dict,
                 data = json.load(fh)
         except Exception as e:
             diag_err("vscode_chat", cf, e)
-            return False
+            return None
     if not isinstance(data, dict):
-        return False
+        return None
     sid = data.get("sessionId") or os.path.splitext(os.path.basename(cf))[0]
+    if skip_sids and sid in skip_sids:
+        return sid
     seen_sids.add(sid)
-    if sid in hash_dbg:
-        return True
     reqs = data.get("requests") or []
     if not isinstance(reqs, list):
         reqs = []
@@ -189,34 +218,54 @@ def scan_chat_file(cf: str, out: dict, sid_repo: dict, sid_agent: dict,
     for r in reqs:
         if not isinstance(r, dict):
             continue
+        md = (r.get("result") or {}).get("metadata") or {}
         ts = r.get("timestamp")
+        if not isinstance(ts, (int, float)):
+            ts = (r.get("modelState") or {}).get("completedAt")
         if not isinstance(ts, (int, float)):
             continue
         date = _utc_date_ms(ts)
         dates.append(date)
-        # Some retained sessions record the counts on the request, others only
-        # under result.metadata. Both are the source's own figures.
-        md = (r.get("result") or {}).get("metadata") or {}
         it = r.get("promptTokens") or md.get("promptTokens") or 0
         ot = r.get("completionTokens") or md.get("completionTokens") or 0
         cc = r.get("copilotCredits") or md.get("copilotCredits") or 0.0
-        model = _norm_model(r.get("modelId"))
-        _add_day(m, date, requests=1, in_=it, out=ot, aiu=cc)
-        _add_flat(m["by_model"], model, requests=1, in_=it, out=ot, aiu=cc)
-        _add_flat(m["by_agent"], agent, requests=1, in_=it, out=ot, aiu=cc)
-        _add_flat(m["by_da"], date + AM_SEP + agent, requests=1, in_=it, out=ot, aiu=cc)
-        _add_flat(m["by_am"], agent + AM_SEP + model, requests=1, in_=it, out=ot, aiu=cc)
-        _add_flat(m["by_dam"], date + AM_SEP + agent + AM_SEP + model,
-                  requests=1, in_=it, out=ot, aiu=cc)
-        _add_flat(m["by_dm"], date + AM_SEP + model, requests=1, in_=it, out=ot, aiu=cc)
-        _add_flat(m["by_sdm"], sid + AM_SEP + date + AM_SEP + model,
-                  requests=1, in_=it, out=ot, aiu=cc)
+        model = _norm_model(r.get("modelId") or md.get("resolvedModel"))
+        if cc:
+            note_chat_credit(date)
+        _add_saved_request(m, sid, date, agent, model, it, ot, cc)
         d = per_day.setdefault(date, [0, 0, 0, 0.0])
         d[0] += 1
         d[1] += it
         d[2] += ot
         d[3] += cc
-        md = (r.get("result") or {}).get("metadata") or {}
+
+        seen_rounds: set[str] = set()
+        for summary in md.get("summaries") or []:
+            if not isinstance(summary, dict):
+                continue
+            usage = summary.get("usage")
+            summary_model = summary.get("model")
+            if not isinstance(usage, dict) or not summary_model:
+                continue
+            round_id = summary.get("toolCallRoundId")
+            if round_id and round_id in seen_rounds:
+                continue
+            if round_id:
+                seen_rounds.add(round_id)
+            prompt = usage.get("prompt_tokens") or 0
+            completion = usage.get("completion_tokens") or 0
+            cache_value = (usage.get("prompt_tokens_details") or {}).get(
+                "cached_tokens")
+            summary_cached = cache_value or 0
+            summary_cached_req = 1 if cache_value is not None else 0
+            _add_saved_request(
+                m, sid, date, agent, _norm_model(summary_model), prompt,
+                completion, cached=summary_cached,
+                cached_req=summary_cached_req)
+            d[0] += 1
+            d[1] += prompt
+            d[2] += completion
+
         for rd in (md.get("toolCallRounds") or []):
             for tc in (rd.get("toolCalls") or []):
                 nm = tc.get("name") if isinstance(tc, dict) else None
@@ -251,7 +300,7 @@ def scan_chat_file(cf: str, out: dict, sid_repo: dict, sid_agent: dict,
     if seen:
         _add_day(m, min(seen), sessions=1)
     _attribute_skills(m, sid_skills.get(sid), {k: tuple(v) for k, v in per_day.items()})
-    return True
+    return sid
 
 
 def _scan_session_dir(entry, m: dict, agent: str, cache: dict,
@@ -304,21 +353,33 @@ def _scan_session_dir(entry, m: dict, agent: str, cache: dict,
 
 
 def _scan_workspace(vs_root: str, h: str, fallback: str, out: dict, cache: dict,
-                    maps: dict, seen_sids: set) -> None:
-    """Scan one workspace hash: its debug-logs, then its retained chatSessions."""
+                    maps: dict, seen_sids: set, source: str = "auto") -> None:
+    """Scan one workspace hash: its request logs, then its saved sessions.
+
+    A session usually exists in both stores, and each store truncates a
+    different way -- request logs drop calls, saved sessions drop turns. So
+    neither is scanned straight into ``out``: each copy is measured on its own
+    and only the one that kept more is folded in. Preferring one store outright
+    silently discarded the better copy whenever that store was the truncated one.
+
+    ``source`` narrows this to a single store, in which case there is nothing to
+    compare and every copy read is kept.
+    """
     sid_repo, sid_agent, sid_skills = maps["repo"], maps["agent"], maps["skills"]
     sid_summary = maps.get("summary", {})
-    hash_dbg: set[str] = set()
+    # sid -> (project, its own metrics, how much of the session it kept)
+    pending: dict[str, tuple[str, dict, tuple]] = {}
     dbg = os.path.join(vs_root, h, "GitHub.copilot-chat", "debug-logs")
-    if os.path.isdir(dbg):
+    if source != "sessions" and os.path.isdir(dbg):
         for e in os.scandir(dbg):
             if not e.is_dir():
                 continue
-            hash_dbg.add(e.name)
             seen_sids.add(e.name)
+            note_debug_session()
             with guarded("vscode_debug", e.path):
-                m = out[sid_repo.get(e.name, fallback)]
+                name = sid_repo.get(e.name, fallback)
                 agent = sid_agent.get(e.name, AGENT_DEFAULT)
+                m = _metrics()
                 name_session(m, e.name, sid_summary.get(e.name))
                 rec, totals = _scan_session_dir(e, m, agent, cache,
                                                 _date_of_path(e.path))
@@ -326,13 +387,28 @@ def _scan_workspace(vs_root: str, h: str, fallback: str, out: dict, cache: dict,
                 main_by_day = rec.get("by_day", {})
                 sdate = min(main_by_day) if main_by_day else _date_of_path(e.path)
                 _add_day(m, sdate, sessions=1)
+                pending[e.name] = (name, m, coverage_score(m))
 
-    # chatSessions: retained (request-trimmed) sessions extend history back
-    # further than the rotated debug-logs and carry real copilotCredits,
-    # tools and languages. Add only sessions NOT already in debug-logs.
     chat_dir = os.path.join(vs_root, h, "chatSessions")
-    if not os.path.isdir(chat_dir):
-        return
+    if source != "debug" and os.path.isdir(chat_dir):
+        _scan_chat_dir(chat_dir, out, maps, seen_sids, fallback, pending)
+    for name, m, _ in pending.values():
+        absorb(out[name], m)
+
+
+def _scan_chat_dir(chat_dir: str, out: dict, maps: dict, seen_sids: set,
+                   fallback: str, pending: dict,
+                   skip_seen: bool = False) -> None:
+    """Read every saved session, keeping each only where it beat its request log.
+
+    A saved copy is read into its own metrics first because the decision needs
+    both totals; a copy that loses is dropped whole rather than partly counted.
+    The global empty-window store sets ``skip_seen`` because workspace stores
+    were already resolved and remain authoritative for overlapping IDs.
+    """
+    sid_repo, sid_agent, sid_skills = maps["repo"], maps["agent"], maps["skills"]
+    sid_summary = maps.get("summary", {})
+    known_sids = set(seen_sids) if skip_seen else set()
     for cf in (glob.glob(os.path.join(chat_dir, "*.json"))
                + glob.glob(os.path.join(chat_dir, "*.jsonl"))):
         cs = src("vscode_chat")
@@ -341,13 +417,28 @@ def _scan_workspace(vs_root: str, h: str, fallback: str, out: dict, cache: dict,
             cs["files_deferred"] += 1
             continue
         with guarded("vscode_chat", cf):
-            if scan_chat_file(cf, out, sid_repo, sid_agent, sid_skills,
-                              seen_sids, fallback, hash_dbg, sid_summary):
-                cs["files_parsed"] += 1
+            saved: dict = defaultdict(_metrics)
+            sid = scan_chat_file(cf, saved, sid_repo, sid_agent, sid_skills,
+                                 seen_sids, fallback, sid_summary, known_sids)
+            if sid is None:
+                continue
+            cs["files_parsed"] += 1
+            if skip_seen and sid in known_sids:
+                continue
+            known_sids.add(sid)
+            rival = pending.pop(sid, None)
+            if rival and rival[2] >= max(
+                    (coverage_score(m) for m in saved.values()), default=(0.0, 0)):
+                absorb(out[rival[0]], rival[1])   # the request log kept more
+                continue
+            if rival:
+                note_store_swap()
+            for name, m in saved.items():
+                absorb(out[name], m)
 
 
 def scan_vscode_root(vs_root: str, vs_db: str, out: dict, cache: dict,
-                     seen_sids: set) -> None:
+                     seen_sids: set, source: str = "auto") -> None:
     """Scan one VS Code variant's workspaceStorage into ``out``."""
     maps = {"repo": sid_repo_map(vs_db),
             "agent": sid_agent_map(vs_db),
@@ -366,7 +457,15 @@ def scan_vscode_root(vs_root: str, vs_db: str, out: dict, cache: dict,
         folder = uri_to_path(d.get("folder") or d.get("workspace") or "")
         fallback = project_name(folder) if folder else "(no folder)"
         with guarded("vscode_ws", wj):
-            _scan_workspace(vs_root, h, fallback, out, cache, maps, seen_sids)
+            _scan_workspace(vs_root, h, fallback, out, cache, maps, seen_sids, source)
+
+    empty_chat = os.path.join(os.path.dirname(vs_root), "globalStorage",
+                              "emptyWindowChatSessions")
+    src("vscode_chat")["roots"].append(
+        {"path": empty_chat, "exists": os.path.isdir(empty_chat)})
+    if source != "debug" and os.path.isdir(empty_chat):
+        _scan_chat_dir(empty_chat, out, maps, seen_sids, "(no folder)", {},
+                       skip_seen=True)
 
     # Orphan skill reads: SKILL.md invocations logged in session_files for
     # sessions whose bodies were fully purged (no debug-log AND no chatSessions
@@ -385,22 +484,32 @@ def scan_vscode_root(vs_root: str, vs_db: str, out: dict, cache: dict,
             b["sessions"] += 1
 
 
-def scan_vscode(variants: list[tuple[str, str]], cache_path: str) -> dict[str, dict]:
+def scan_vscode(variants: list[tuple[str, str]], cache_path: str,
+                source: str = "auto") -> dict[str, dict]:
     """project -> metrics across every (workspaceStorage, session-store.db) pair.
 
     Only recorded values are used: real input/output tokens for every request,
     and real AIU where GitHub reported ``copilotUsageNanoAiu``.
+
+    ``source`` selects the store: ``debug`` for request logs only, ``sessions``
+    for saved sessions only, ``auto`` to prefer the request log and let saved
+    sessions fill what it no longer holds. ``auto`` settles to ``sessions`` when
+    the machine wrote no request logs at all.
     """
+    note_source(source)
+    source = source_rec()["requested"]
     out: dict[str, dict] = defaultdict(_metrics)
     cache = load_cache(cache_path)
     for vs_root, _db in variants:
         src("vscode_debug")["roots"].append(
             {"path": vs_root, "exists": os.path.isdir(vs_root)})
-    prewarm(cache, [r for r, _ in variants])
+    if source != "sessions":
+        prewarm(cache, [r for r, _ in variants])
     seen_sids: set[str] = set()
     for vs_root, vs_db in variants:
         if os.path.isdir(vs_root):
             with guarded("vscode_debug", vs_root):
-                scan_vscode_root(vs_root, vs_db, out, cache, seen_sids)
+                scan_vscode_root(vs_root, vs_db, out, cache, seen_sids, source)
     save_cache(cache_path, cache)
+    resolve_source()
     return out

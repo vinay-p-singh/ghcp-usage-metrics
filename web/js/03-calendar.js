@@ -12,10 +12,13 @@ function dayTipHTML(iso, s) {
   const wd = new Date(iso + "T00:00:00Z").toLocaleDateString(undefined,
     { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
   const line = (k, v) => `<div class="dt-row"><span>${k}</span><b>${v}</b></div>`;
-  const warn = dayWarning({ requests: s.req, aiu: s.aiu, noToken: s.noToken });
+  const policy = calendarWarningPolicy(DIAG && DIAG.source);
+  const warn = policy.perDay
+    ? dayWarning({ requests: s.req, aiu: s.aiu, noToken: s.noToken, noTokenBy: s.noTokenBy })
+    : null;
   return `<div class="dt-head">${esc(wd)}</div>` +
     line("Requests", fmt(s.req)) +
-    line("Credits", fmtAiu(s.aiu) + " AIU") +
+    line("AI credits", fmtAiu(s.aiu)) +
     (costOn() ? line("Cost", fmtUsd(s.aiu)) : "") +
     line("Input", fmtK(s.in)) +
     line("Output", fmtK(s.out)) +
@@ -111,6 +114,12 @@ function showDayChip(lo, hi) {
 // GitHub-style contribution calendar coloured by requests/day (fully recorded).
 function renderHeatmap(stats, from, to) {
   stats = stats || {};
+  const policy = calendarWarningPolicy(DIAG && DIAG.source);
+  const sourceNote = document.getElementById("calSourceNote");
+  if (sourceNote) {
+    sourceNote.textContent = policy.note;
+    sourceNote.hidden = !policy.note;
+  }
   const dailyReq = {};
   for (const k in stats) dailyReq[k] = stats[k].req;
   const start = new Date(from + "T00:00:00Z");
@@ -137,8 +146,9 @@ function renderHeatmap(stats, from, to) {
     if (iso >= from && iso <= to) {
       const n = dailyReq[iso] || 0;
       const idx = bucket(n);
-      const flagged = n > 0 && dayWarning({
-        requests: n, aiu: (stats[iso] || {}).aiu, noToken: (stats[iso] || {}).noToken });
+      const flagged = policy.perDay && n > 0 && dayWarning({
+        requests: n, aiu: (stats[iso] || {}).aiu, noToken: (stats[iso] || {}).noToken,
+        noTokenBy: (stats[iso] || {}).noTokenBy });
       cells += `<rect class="calcell${flagged ? " calwarn" : ""}" data-date="${iso}" x="${x}" y="${y}" width="${cell}" height="${cell}" rx="3" style="fill:${CO[idx]}"></rect>` +
         `<text x="${x + cell / 2}" y="${y + cell / 2 + 3.5}" text-anchor="middle" font-size="10" ` +
         `style="fill:${idx >= 3 ? "#ffffff" : "var(--fg-muted)"}" pointer-events="none">${cur.getUTCDate()}</text>` +
@@ -168,7 +178,7 @@ const PALETTE = ["#4e79a7", "#f28e2b", "#59a14f", "#b07aa1", "#e15759", "#76b7b2
 function renderTop(perProj) {
   const items = [...perProj].filter(p => p.aiu > 0).sort((a, b) => b.aiu - a.aiu);
   const total = items.reduce((s, p) => s + p.aiu, 0);
-  if (!total) { topChart.innerHTML = '<div class="muted">No AIU in range.</div>'; return; }
+  if (!total) { topChart.innerHTML = '<div class="muted">No AI credits in range.</div>'; return; }
   const N = 8;
   const top = items.slice(0, N);
   const rest = items.slice(N);
@@ -178,7 +188,7 @@ function renderTop(perProj) {
   const bar = segs.map(s => {
     const pct = s.aiu / total * 100;
     return `<span class="seg" style="width:${pct.toFixed(2)}%;background:${s.color}" ` +
-      `title="${esc(s.name)}: ${fmtAiu(s.aiu)} AIU (${pct.toFixed(1)}%)"></span>`;
+      `title="${esc(s.name)}: ${fmtAiu(s.aiu)} AI credits (${pct.toFixed(1)}%)"></span>`;
   }).join("");
   const legend = segs.map(s => {
     const pct = s.aiu / total * 100;

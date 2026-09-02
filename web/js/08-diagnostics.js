@@ -9,11 +9,60 @@ const diagSources = document.getElementById("diagSources");
 const diagErrors = document.getElementById("diagErrors");
 const diagBadge = document.getElementById("diagBadge");
 const diagReconcile = document.getElementById("diagReconcile");
-const CLIENT_NAME = { vscode: "VS Code", cli: "Copilot CLI", claude: "Claude Code" };
+const diagDebugLog = document.getElementById("diagDebugLog");
 
 function diagPill(k, v, sub, cls) {
   return `<div class="pill"><div class="k">${esc(k)}</div>` +
     `<div class="v ${cls || ""}">${v}</div><div class="s">${esc(sub || "")}</div></div>`;
+}
+
+// The banner that names this setting is dismissible, and a reader who dismissed
+// it still has to be able to find out why their figures are thin. This panel is
+// the permanent copy. It reports the enabled case too: "logging is on" is the
+// answer to "is that why?", and an empty panel would read as a broken one.
+function renderDebugLogs(rec) {
+  if (!diagDebugLog) return;
+  if (rec && rec.requested === "sessions") {
+    diagDebugLog.innerHTML =
+      '<p class="diag-reason"><b>Agent debug logs were not read for this report.</b> You ' +
+      'chose saved chat sessions only, so the request logs were never opened and this scan ' +
+      'cannot say whether Copilot is writing them.</p>' +
+      '<p class="diag-reason">Set the store to <b>Automatic</b> or <b>Agent debug logs</b> in ' +
+      'Config to find out. Nothing was lost by excluding them — the logs are still on disk, ' +
+      'and the next scan that reads them will report every model call they hold.</p>';
+    return;
+  }
+  const setup = debugLogSetup(rec);
+  if (setup) {
+    diagDebugLog.innerHTML =
+      '<p class="diag-reason">\u26a0 <b>Copilot is not writing agent debug logs on this ' +
+      'machine.</b> That is the richest local source: it records every model call with its ' +
+      'tokens and AI credits. Without it this report is built from VS Code\u2019s saved chat ' +
+      'sessions, which keep only the most recent turns of each conversation \u2014 which is ' +
+      'why days can show requests with no credits beside them.</p>' +
+      `<p class="diag-reason">${esc(setup.body)}</p>` +
+      '<p class="diag-reason">This only improves coverage from here on. Conversations whose ' +
+      'logs were never written cannot be recovered, and nothing on this page is estimated to ' +
+      'stand in for them.</p>';
+    return;
+  }
+  const n = (rec && rec.debug_sessions) || 0;
+  const swapped = (rec && rec.sessions_from_saved) || 0;
+  diagDebugLog.innerHTML =
+    `<p class="diag-reason"><b>Agent debug file logging is on.</b> This scan read ` +
+    `${fmt(n)} session${n === 1 ? "" : "s"} from it, with every model call\u2019s tokens and ` +
+    `AI credits as Copilot recorded them.</p>` +
+    (swapped
+      ? `<p class="diag-reason">${fmt(swapped)} of those session${swapped === 1 ? "" : "s"} ` +
+        `had been trimmed so far by log rotation that VS Code\u2019s saved copy held more, and ` +
+        `the saved copy was used instead. A swapped session reports turns rather than model ` +
+        `calls, and loses its cache, tool and subagent detail \u2014 understating credits ` +
+        `would have been the worse error.</p>`
+      : '<p class="diag-reason">No session needed to fall back to VS Code\u2019s saved copy, ' +
+        'so nothing here was thinned by log rotation.</p>') +
+    `<p class="diag-reason">These logs rotate: Copilot keeps a fixed number of session logs ` +
+    `per workspace and caps each one\u2019s size, so the oldest are discarded as you work. ` +
+    `That is the usual reason an older day looks thinner than you remember it.</p>`;
 }
 
 // Credit telemetry arrived at different times per harness, so a total spanning
@@ -30,10 +79,10 @@ function renderCreditCoverage(cf) {
     return;
   }
   const onsetRows = Object.keys(cf.onsets || {}).map(k =>
-    `<tr><td>${esc(CLIENT_NAME[k] || k)}</td><td>${esc(cf.onsets[k])}</td>` +
+    `<tr><td>${esc(CLIENT_LABEL[k] || k)}</td><td>${esc(cf.onsets[k])}</td>` +
     `<td>reports credits</td></tr>`).join("");
   const neverRows = (cf.never_reports || []).map(k =>
-    `<tr><td>${esc(CLIENT_NAME[k] || k)}</td><td>&mdash;</td>` +
+    `<tr><td>${esc(CLIENT_LABEL[k] || k)}</td><td>&mdash;</td>` +
     `<td>publishes no credit figure at all</td></tr>`).join("");
   const days = cf.days_before || 0;
   diagFloor.innerHTML =
@@ -109,6 +158,7 @@ function renderDiagnostics() {
   if (!diagPills) return;
   renderReconcile();
   const d = DIAG || {};
+  renderDebugLogs(d.source);
   const srcs = d.sources || {};
   const cov = d.coverage || {};
   const rows = d.no_token_rows || [];
@@ -143,14 +193,14 @@ function renderDiagnostics() {
   } else {
     const bc = cov.by_client || {};
     const clientRows = Object.keys(bc).filter(k => bc[k].requests).map(k =>
-      `<tr><td>${esc(CLIENT_NAME[k] || k)}</td><td class="num">${fmt(bc[k].requests)}</td>` +
+      `<tr><td>${esc(CLIENT_LABEL[k] || k)}</td><td class="num">${fmt(bc[k].requests)}</td>` +
       `<td class="num">${fmt(bc[k].no_tokens)}</td>` +
       `<td class="num">${bc[k].requests ? (bc[k].no_tokens * 100 / bc[k].requests).toFixed(1) : 0}%</td></tr>`).join("");
     const reasons = [...new Set(rows.map(r => r.client))].map(k =>
-      `<p class="diag-reason"><b>${esc(CLIENT_NAME[k] || k)}:</b> ${esc(rows.find(r => r.client === k).reason)}</p>`).join("");
+      `<p class="diag-reason"><b>${esc(CLIENT_LABEL[k] || k)}:</b> ${esc(rows.find(r => r.client === k).reason)}</p>`).join("");
     const projRowsHtml = rows.map(r =>
       `<tr><td class="dn" title="${esc(r.project)}">${esc(r.project)}</td>` +
-      `<td>${esc(CLIENT_NAME[r.client] || r.client)}</td>` +
+      `<td>${esc(CLIENT_LABEL[r.client] || r.client)}</td>` +
       `<td class="num">${fmt(r.requests)}</td><td class="num">${fmt(r.no_tokens)}</td></tr>`).join("");
     diagCoverage.innerHTML =
       `<p class="diag-reason"><b>${fmt(cov.requests_no_tokens)} of ${fmt(cov.requests)} requests ` +

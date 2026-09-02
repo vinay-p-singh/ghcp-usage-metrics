@@ -376,15 +376,17 @@
   /* config quick-settings form */
   .cfg-form { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); margin-bottom: var(--sp-3); }
   .cfg-form label { display: flex; flex-direction: column; gap: 5px; font-size: var(--fs-sm); color: var(--fg); }
-  .cfg-form input { font: inherit; font-size: var(--fs-sm); padding: 6px 9px; border: 1px solid var(--border);
+  .cfg-form input, .cfg-form select { font: inherit; font-size: var(--fs-sm); padding: 6px 9px; border: 1px solid var(--border);
                     border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); }
-  .cfg-form input:focus { outline: none; border-color: var(--accent); }
+  .cfg-form input:focus, .cfg-form select:focus { outline: none; border-color: var(--accent); }
+  .cfg-form select:disabled { background: var(--surface-2); color: var(--fg-muted); }
   .cfg-hint { font-size: var(--fs-label); color: var(--fg-muted); line-height: 1.45; }
   .cfg-fixed { font-size: var(--fs-label); color: var(--fg-subtle); font-weight: 400; font-style: italic; }
   #qsFloor { background: var(--surface-2); color: var(--fg-muted); cursor: default; }
   /* calendar: how-to note, interactive cells, day tooltip, day-filter chip */
   .cal-howto { margin: -4px 0 12px; font-size: var(--fs-sm); color: var(--fg-muted); line-height: 1.55; }
   .cal-howto b { color: var(--fg); font-weight: 600; }
+  .cal-source-note { margin: 0 0 12px; padding: 8px 10px; border-left: 3px solid var(--accent); background: var(--accent-soft); color: var(--fg); font-size: var(--fs-sm); line-height: 1.5; }
   .calcell, .dayhit { cursor: pointer; }
   .calcell:hover { stroke: var(--accent); stroke-width: 2; }
   .calcell.in-drag, .dayhit.in-drag { stroke: var(--accent); stroke-width: 2; }

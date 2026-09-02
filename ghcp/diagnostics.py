@@ -27,6 +27,8 @@ SOURCE_LABELS = {
     "claude": "Claude Code sessions (~/.claude/projects)",
 }
 
+SOURCES = ("auto", "debug", "sessions")
+
 NO_TOKEN_REASON = {
     "cli": "Copilot CLI stored no per-request tokens before its billing telemetry "
            "began. These requests were recovered from the session store's `turns` "
@@ -53,7 +55,63 @@ def diag_reset() -> None:
         "errors": [],
         "coverage": {},
         "no_token_rows": [],
+        "source": _blank_source(),
     })
+
+
+def _blank_source() -> dict:
+    return {"requested": "auto", "effective": "auto",
+            "debug_sessions": 0, "chat_credit_first": None,
+            "sessions_from_saved": 0}
+
+
+def source_rec() -> dict:
+    """Which VS Code store this run read, and what that costs the reader."""
+    return DIAG.setdefault("source", _blank_source())
+
+
+def note_source(requested: str) -> None:
+    rec = source_rec()
+    rec["requested"] = requested if requested in SOURCES else "auto"
+    rec["effective"] = rec["requested"]
+
+
+def note_debug_session() -> None:
+    source_rec()["debug_sessions"] += 1
+
+
+def note_store_swap() -> None:
+    """A session whose saved copy had kept more than its request log.
+
+    Worth counting rather than doing silently: it is the measure of how much
+    the request logs have rotated away.
+    """
+    source_rec()["sessions_from_saved"] += 1
+
+
+def note_chat_credit(date: str) -> None:
+    """Earliest day a saved session carried a credit figure of its own.
+
+    VS Code only started writing one part-way through the tool's history, so a
+    sessions-only report is complete on tokens and truncated on credits. The
+    boundary is evidence in the logs, so it is measured here rather than being
+    written down as a constant that quietly goes stale.
+    """
+    rec = source_rec()
+    if not rec["chat_credit_first"] or date < rec["chat_credit_first"]:
+        rec["chat_credit_first"] = date
+
+
+def resolve_source() -> str:
+    """Settle ``auto`` once the scan knows whether any request log existed.
+
+    An explicit choice is never overridden -- someone comparing the two stores
+    has to be able to trust that they got the one they asked for.
+    """
+    rec = source_rec()
+    if rec["requested"] == "auto" and not rec["debug_sessions"]:
+        rec["effective"] = "sessions"
+    return rec["effective"]
 
 
 def src(key: str) -> dict:

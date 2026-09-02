@@ -7,6 +7,18 @@
 <style><!--@css--></style>
 </head>
 <body>
+<div id="rawSourceNotice" style="display:none;position:fixed;inset:0;z-index:9999;place-items:center;background:#f6f8fa;color:#1f2328;font:16px/1.5 sans-serif;padding:32px;text-align:center">
+  <div style="max-width:680px">
+    <h1 style="font-size:24px">This file is the dashboard source</h1>
+    <p>CSS, JavaScript and usage data are assembled into the generated dashboard.</p>
+    <p><a href="../out/dashboard.html">Open the generated dashboard</a>, or run <code>python usage.py</code> first if it has not been generated yet.</p>
+  </div>
+</div>
+<script>
+if (document.querySelector("style").innerHTML.includes("@css")) {
+  document.getElementById("rawSourceNotice").style.display = "grid";
+}
+</script>
 <script><!--@boot-js--></script>
 
 <div class="topbar">
@@ -49,10 +61,8 @@
 </div>
 <div class="notice" id="logNotice" hidden>
   <span class="notice-ico">&#9432;</span>
-  <div class="notice-body"><b>Only request counts were found for these sessions.</b> Token, AI-credit (AIU)
-    &amp; model figures come from fields Copilot Chat writes into its own logs; older sessions get
-    trimmed and debug logs rotate, so only request counts survived. New activity will fill them in.</div>
-  <button class="tbtn" id="logEnableBtn">Diagnostics</button>
+  <div class="notice-body" id="logBody"></div>
+  <button class="tbtn primary" id="logEnableBtn">Enable logging</button>
   <button class="notice-x" id="logDismiss" title="Dismiss" aria-label="Dismiss">&times;</button>
 </div>
 <div class="notice" id="floorNotice" hidden>
@@ -60,6 +70,11 @@
   <div class="notice-body" id="floorBody"></div>
   <button class="tbtn" id="floorShowAll">Include earlier</button>
   <button class="notice-x" id="floorDismiss" title="Dismiss" aria-label="Dismiss">&times;</button>
+</div>
+<div class="notice" id="sourceNotice" hidden>
+  <span class="notice-ico">&#9432;</span>
+  <div class="notice-body" id="sourceBody"></div>
+  <button class="notice-x" id="sourceDismiss" title="Dismiss" aria-label="Dismiss">&times;</button>
 </div>
 
 <nav class="tabs" id="tabs" role="tablist" aria-label="Dashboard views">
@@ -77,7 +92,7 @@
 <div id="dashView">
   <div class="daychip" id="dayChip" hidden></div>
   <div class="pills">
-    <div class="pill hero"><div class="k">AI Credits (AIU)</div><div class="v" id="pAiu">0</div><div class="s" id="pAiuSub">nano-AIU / 1e9</div></div>
+    <div class="pill hero"><div class="k">AI credits</div><div class="v" id="pAiu">0</div><div class="s" id="pAiuSub">recorded by GitHub</div></div>
     <div class="pill cost"><div class="k">Estimated cost</div><div class="v" id="pCost">&mdash;</div><div class="s" id="pCostSub"></div></div>
     <div class="pill"><div class="k">Requests</div><div class="v" id="pReq">0</div><div class="s">LLM calls</div></div>
     <div class="pill"><div class="k">Input tokens</div><div class="v" id="pIn">0</div><div class="s" id="pInSub"></div></div>
@@ -151,11 +166,11 @@
 
     <section class="tabpanel active" data-tabpanel="overview">
       <div class="panel">
-        <h3>AIU credits per day</h3>
+        <h3>AI credits per day</h3>
         <div id="dailyChart" class="chart"></div>
       </div>
       <div class="panel">
-        <h3>Top projects by AIU</h3>
+        <h3>Top projects by AI credits</h3>
         <div id="topChart"></div>
       </div>
       <div class="panel">
@@ -163,7 +178,7 @@
         <div class="ptable-scroll">
           <table class="ptable">
             <thead><tr><th>Project</th><th class="num">Sessions</th><th class="num">Requests</th>
-              <th class="num">AIU</th><th class="num cost">Cost</th><th class="num">Input</th><th class="num">Output</th></tr></thead>
+              <th class="num">AI credits</th><th class="num cost">Cost</th><th class="num">Input</th><th class="num">Output</th></tr></thead>
             <tbody id="tblBody"></tbody>
           </table>
         </div>
@@ -180,6 +195,7 @@
           <b>Hover</b> a day for its requests, credits, tokens and cost.
           <b>Click</b> a day to filter the whole dashboard to it.
           <b>Drag</b> across days to select a range. A chip appears above the charts to take you back.</p>
+        <p class="cal-source-note" id="calSourceNote" hidden></p>
         <div id="calChart" class="cal-wrap"></div>
       </div>
     </section>
@@ -190,7 +206,7 @@
         <div id="pieClient"></div>
       </div>
       <div class="panel">
-        <h3>AIU by model</h3>
+        <h3>AI credits by model</h3>
         <div id="pieModel"></div>
       </div>
       <div class="panel">
@@ -209,21 +225,21 @@
 
     <section class="tabpanel" data-tabpanel="agents">
       <div class="panel">
-        <h3>Cost signals <span class="hint">&mdash; biggest AIU spenders to target for reduction</span></h3>
+        <h3>Cost signals <span class="hint">&mdash; biggest AI-credit spenders to target for reduction</span></h3>
         <div id="agentSignal"></div>
       </div>
       <div class="panel">
-        <h3>Most expensive agents <span class="hint">&mdash; ranked by total AIU within each group: <b>base</b> chat/CLI/Claude agents vs <b>subagents</b> launched via <code>runSubagent</code>. Click a row for its model breakdown. An invocation = one LLM request.</span></h3>
+        <h3>Most expensive agents <span class="hint">&mdash; ranked by total AI credits within each group: <b>base</b> chat/CLI/Claude agents vs <b>subagents</b> launched via <code>runSubagent</code>. Click a row for its model breakdown. An invocation = one LLM request.</span></h3>
         <div class="ptable-scroll">
           <table class="ptable">
-            <thead><tr><th>Agent</th><th class="num">Requests</th><th class="num">Total AIU</th>
-              <th class="num">AIU / request</th><th class="num">Input</th><th class="num">Output</th></tr></thead>
+            <thead><tr><th>Agent</th><th class="num">Requests</th><th class="num">Total AI credits</th>
+              <th class="num">Credits / request</th><th class="num">Input</th><th class="num">Output</th></tr></thead>
             <tbody id="agentBody"></tbody>
           </table>
         </div>
       </div>
       <div class="panel">
-        <h3>AIU by agent</h3>
+        <h3>AI credits by agent</h3>
         <div id="pieAgent"></div>
       </div>
     </section>
@@ -239,8 +255,8 @@
               <th class="sortable" data-sort="project">Project</th>
               <th class="sortable" data-sort="when">When</th>
               <th class="sortable num" data-sort="requests">Requests</th>
-              <th class="sortable num" data-sort="aiu">AIU</th>
-              <th class="sortable num" data-sort="perReq">AIU / req</th>
+              <th class="sortable num" data-sort="aiu">AI credits</th>
+              <th class="sortable num" data-sort="perReq">Credits / req</th>
               <th class="sortable num" data-sort="in">Input</th>
               <th class="sortable num" data-sort="cached">Cached</th>
               <th class="sortable num" data-sort="out">Output</th>
@@ -253,11 +269,11 @@
 
     <section class="tabpanel" data-tabpanel="skills">
       <div class="panel">
-        <h3>Skills used <span class="hint">&mdash; SKILL.md reads in VS Code; each read = one invocation. AIU/tokens are the summed totals of every session that invoked the skill (a session counts toward each skill it used). Recent VS Code sessions only.</span></h3>
+        <h3>Skills used <span class="hint">&mdash; SKILL.md reads in VS Code; each read = one invocation. Credits and tokens are the summed totals of every session that invoked the skill (a session counts toward each skill it used). Recent VS Code sessions only.</span></h3>
         <div class="ptable-scroll">
           <table class="ptable">
             <thead><tr><th>Skill</th><th class="num">Invocations</th><th class="num">Sessions</th>
-              <th class="num">AIU</th><th class="num">AIU / session</th><th class="num">Input</th><th class="num">Output</th></tr></thead>
+              <th class="num">AI credits</th><th class="num">Credits / session</th><th class="num">Input</th><th class="num">Output</th></tr></thead>
             <tbody id="skillBody"></tbody>
           </table>
         </div>
@@ -277,7 +293,7 @@
 
     <section class="tabpanel" data-tabpanel="forecast">
       <div class="panel">
-        <h3>Usage forecast <span class="hint">&mdash; linear projection from recorded AIU in the selected range; labelled estimates, not recorded values. Set <code>budget.monthlyAiu</code> in Config to compare.</span></h3>
+        <h3>Usage forecast <span class="hint">&mdash; linear projection from recorded AI credits in the selected range; labelled estimates, not recorded values. Set <code>budget.monthlyAiu</code> in Config to compare.</span></h3>
         <div id="fcView"></div>
       </div>
     </section>
@@ -304,6 +320,32 @@
         <div class="pills" id="diagPills"></div>
       </div>
       <div class="panel">
+        <h3>Agent debug logs <span class="hint">&mdash; the richest local source, and whether Copilot is writing it on this machine.</span></h3>
+        <div id="diagDebugLog"></div>
+      </div>
+      <div class="panel" id="diagStores">
+        <h3>Why the two stores report different totals <span class="hint">&mdash; changing the store in Config moves every figure on this page. This is what each of those movements means.</span></h3>
+        <p class="provenance">VS Code keeps two records of the same conversations, and they discard data along opposite axes. Agent debug
+          logs keep every model call but retain only a fixed number of sessions. Saved chat sessions survive far longer but keep only the
+          most recent turns of each conversation. Neither is a subset of the other, so neither total is the corrected version of the other.</p>
+        <table class="ptable">
+          <thead><tr><th></th><th>Agent debug logs</th><th>Saved chat sessions</th></tr></thead>
+          <tbody>
+            <tr><td>A request means</td><td>one model call</td><td>one turn you typed</td></tr>
+            <tr><td>What is discarded</td><td>whole sessions, oldest first</td><td>turns inside a session</td></tr>
+            <tr><td>Credit field</td><td><code>copilotUsageNanoAiu</code></td><td><code>copilotCredits</code>, absent from sessions saved before it was introduced</td></tr>
+            <tr><td>Reaches</td><td>recent history, in full detail</td><td>much further back, thinly</td></tr>
+          </tbody>
+        </table>
+        <ul class="diag-limits">
+          <li><b>Requests can differ roughly tenfold, and that is a change of unit.</b> One turn runs a tool loop of many model calls. Debug logs count the calls; saved sessions count the turn. Both answer a real question, but not the same one.</li>
+          <li><b>Input tokens follow the request count.</b> Every call in a loop resends the conversation, most of it read from cache, so ten times the calls is roughly ten times the input.</li>
+          <li><b>Credits are the same metric in both.</b> Where both stores are complete they agree to the decimal. A lower saved-session total is missing coverage, not a different definition &mdash; chat sessions saved before <code>copilotCredits</code> existed carry tokens with no credit figure, and those days score zero.</li>
+          <li><b>Projects and active days can move in opposite directions.</b> Saved sessions usually span more days because they are kept longer; debug logs usually cover more projects because their bodies have not been trimmed away.</li>
+          <li><b>Automatic is not the sum of the two.</b> It compares the two copies of each session and keeps whichever recorded more credits, so nothing is counted twice. A copy holding no credit figure can never displace a billed one &mdash; unrecorded must not read as cheaper.</li>
+        </ul>
+      </div>
+      <div class="panel">
         <h3>Requests with no token data <span class="hint">&mdash; real calls whose source never wrote down their size. This is why some projects show requests but no credits.</span></h3>
         <div id="diagCoverage"></div>
       </div>
@@ -322,10 +364,10 @@
       <div class="panel">
         <h3>Known limitations of local extraction</h3>
         <ul class="diag-limits">
-          <li><b>Claude Code has no AI credits.</b> It records real tokens, but GitHub's AIU metric does not exist there, so its credit total is always 0.</li>
+          <li><b>Claude Code has no AI credits.</b> It records real tokens, but GitHub's AI-credit metric does not exist there, so its credit total is always 0.</li>
           <li><b>Chat-picker agent personas are not recorded.</b> They fold into &ldquo;GitHub Copilot Chat&rdquo;. Only subagents launched through <code>runSubagent</code> write their own logs and can be attributed.</li>
           <li><b>Skill and agent attribution reaches back less far than requests.</b> VS Code keeps only its most recent sessions in <code>session-store.db</code>; older ones are purged by VS Code, not by this tool.</li>
-          <li><b>Model, agent and skill breakdowns are lifetime totals.</b> GitHub's per-day telemetry carries no model or agent dimension, so the date range cannot re-scope them.</li>
+          <li><b>Agent and skill breakdowns are lifetime totals.</b> The logs pair a request with its model and its date, so models re-scope with the date range, but nothing pairs an agent or a skill with a date &mdash; those two cannot.</li>
           <li><b>A session that used several skills counts its tokens toward each of them.</b> Per-skill totals therefore overlap and do not sum to the grand total.</li>
           <li><b>Debug logs rotate.</b> Older history is reconstructed from trimmed <code>chatSessions</code>, which retain fewer requests per session &mdash; so early days look sparse.</li>
         </ul>
@@ -356,7 +398,7 @@
         <input type="number" id="qsCost" min="0" step="0.001" placeholder="not set">
         <span class="cfg-hint">Turns on every cost figure. Your rate &times; recorded credits &mdash; a projection, not a bill. No rate is detectable locally, so nothing is shown until you set one.</span>
       </label>
-      <label>Monthly budget (AIU)
+      <label>Monthly budget (AI credits)
         <input type="number" id="qsBudget" min="0" step="1" placeholder="not set">
         <span class="cfg-hint">Drives the Forecast tab's over/under comparison.</span>
       </label>
@@ -375,6 +417,14 @@
       <label>Auto-refresh (minutes)
         <input type="number" id="qsAuto" min="0" step="1">
         <span class="cfg-hint">0 = off. Inside the VS Code extension this re-scans your logs live.</span>
+      </label>
+      <label>VS Code data source
+        <select id="qsSource">
+          <option value="auto">Automatic (recommended)</option>
+          <option value="debug">Agent debug logs only</option>
+          <option value="sessions">Saved chat sessions only</option>
+        </select>
+        <span class="cfg-hint" id="qsSourceNote"><b>Agent debug logs</b> have the richest per-call detail. <b>Automatic</b> is recommended because those logs rotate: it compares both local copies of each VS Code session and keeps the fuller one. Changing this re-reads your logs immediately &mdash; it is not a display filter, and it applies on its own without <b>Save settings</b>.</span>
       </label>
       <label class="cfg-check"><span><input type="checkbox" id="qsHideEmpty"> Hide projects with no recorded tokens</span>
         <span class="cfg-hint">Sessions that never reached a model, and trimmed logs that kept only a request count, leave behind projects with no credits and no tokens. On = they start unticked and sit behind a &ldquo;show&rdquo; link in the sidebar. They are never deleted &mdash; tick one and it counts again.</span>

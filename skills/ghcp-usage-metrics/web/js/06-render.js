@@ -31,7 +31,7 @@ function renderStrengths(models, agents, tools, perProj, tot) {
   stView.innerHTML = `<div class="pills">${cards.join("")}</div>` +
     `<div class="ptable-scroll" style="margin-top:14px"><table class="ptable"><thead><tr>` +
     `<th>Most productive projects (by output)</th><th class="num">Output</th><th class="num">Input</th>` +
-    `<th class="num">Requests</th><th class="num">AIU</th></tr></thead><tbody>${projRows}</tbody></table></div>`;
+    `<th class="num">Requests</th><th class="num">AI credits</th></tr></thead><tbody>${projRows}</tbody></table></div>`;
 }
 
 // Resolve the current filter scope (harness toggles, search, project selection,
@@ -149,7 +149,7 @@ function aggregate(scope) {
           agg.cachedReq += t.cached_req || 0;
           agg.daily[date] = (agg.daily[date] || 0) + t.aiu;
           agg.dailyReq[date] = (agg.dailyReq[date] || 0) + t.requests;
-          const ds = agg.dayStats[date] || (agg.dayStats[date] = { req: 0, in: 0, out: 0, aiu: 0, sessions: 0, noToken: 0 });
+          const ds = agg.dayStats[date] || (agg.dayStats[date] = { req: 0, in: 0, out: 0, aiu: 0, sessions: 0, noToken: 0, noTokenBy: {} });
           ds.req += t.requests; ds.in += t.in; ds.out += t.out; ds.aiu += t.aiu;
           ds.sessions += sessionTotals.byDay[date] || 0;
           if (hk === "vs") agg.reqVs += t.requests; else if (hk === "cli") agg.reqCli += t.requests; else agg.reqCla += t.requests;
@@ -157,14 +157,18 @@ function aggregate(scope) {
         }
       }
       // Requests the source filed under no model at all: they raise the request
-      // count and nothing else, which is what makes a day look cheap.
+      // count and nothing else, which is what makes a day look cheap. Kept per
+      // harness as well as in total, because the reason they are missing is a
+      // property of the harness and a day is often mixed.
       for (const key in clm.by_dm) {
         const i = key.indexOf(DIM_SEP);
         if (i < 0 || isRecordedModel(key.slice(i + 1))) continue;
         const date = key.slice(0, i);
         if (date < from || date > to) continue;
-        const ds = agg.dayStats[date] || (agg.dayStats[date] = { req: 0, in: 0, out: 0, aiu: 0, sessions: 0, noToken: 0 });
-        ds.noToken += clm.by_dm[key].requests;
+        const ds = agg.dayStats[date] || (agg.dayStats[date] = { req: 0, in: 0, out: 0, aiu: 0, sessions: 0, noToken: 0, noTokenBy: {} });
+        const n = clm.by_dm[key].requests;
+        ds.noToken += n;
+        ds.noTokenBy[CLIENT_OF[hk]] = (ds.noTokenBy[CLIENT_OF[hk]] || 0) + n;
       }
       // The model list follows the date range now, same as everything else.
       const mw = modelTotalsIn(clm, from, to);

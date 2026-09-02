@@ -38,13 +38,23 @@ test("the page renders the injected dataset on load", () => {
 test("an empty dataset renders without throwing", () => {
   const { document: doc } = boot({ data: [] });
   assert.equal(text(doc, "pProj"), "0");
-  assert.match(doc.getElementById("dailyChart").textContent, /No AIU in range/);
+  assert.match(doc.getElementById("dailyChart").textContent, /No AI credits in range/);
 });
 
 test("the date inputs open on the full recorded span", () => {
   const { document: doc } = boot();
   assert.equal(doc.getElementById("dFrom").value, "2026-07-01");
   assert.equal(doc.getElementById("dTo").value, "2026-07-02");
+});
+
+test("the data source selector lives in Config, with the other settings", () => {
+  const { document: doc } = boot({ vscode: true });
+  const source = doc.getElementById("qsSource");
+  // It sat in the sidebar, which is hidden the moment Config is opened -- so it
+  // was invisible exactly when someone went looking for settings.
+  assert.ok(doc.querySelector("#cfgView #qsSource"), "source selection is not where settings are");
+  assert.equal(doc.querySelector("#dashView #qsSource"), null, "it must not be in both places");
+  assert.deepEqual([...source.options].map(option => option.value), ["auto", "debug", "sessions"]);
 });
 
 // --------------------------------------------------------------------------
@@ -937,4 +947,224 @@ test("the chosen sort survives a filter change", () => {
   const th = doc.querySelector('[data-tabpanel="sessions"] th[data-sort="project"]');
   assert.equal(th.getAttribute("aria-sort"), "ascending",
                "re-rendering must not silently reset the reader's choice");
+});
+
+// --------------------------------------------------------------------------
+// which store produced the numbers
+// --------------------------------------------------------------------------
+
+function withSource(source) {
+  const diag = h.sampleDiag();
+  diag.source = Object.assign({ requested: "auto", effective: "auto",
+                                debug_sessions: 2, chat_credit_first: null }, source);
+  return diag;
+}
+
+test("a normal run shows no source banner", () => {
+  const { document: doc } = boot({ diag: withSource({}) });
+  assert.equal(doc.getElementById("sourceNotice").hidden, true);
+});
+
+test("a report built from saved sessions says so on the first screen", () => {
+  const { document: doc } = boot({ diag: withSource({
+    effective: "sessions", debug_sessions: 0, chat_credit_first: "2026-06-26" }) });
+  const notice = doc.getElementById("sourceNotice");
+  assert.equal(notice.hidden, false, "the fallback has to be visible without opening a tab");
+  assert.match(notice.textContent, /saved sessions/i);
+  assert.match(notice.textContent, /2026-06-26/);
+  assert.ok(notice.classList.contains("partial"), "an unrequested fallback is a warning");
+});
+
+test("a sessions-only calendar replaces repetitive day warnings with one coverage note", () => {
+  const data = [h.project("acme/saved", {
+    vscode: h.client(
+      { "2026-07-01": { sessions: 1, requests: 1, in: 100, out: 10, aiu: 0 } },
+      { by_model: { "gpt-x": h.FLAT({ requests: 1, in: 100, out: 10 }) },
+        by_dm: { "2026-07-01\u001fgpt-x": h.FLAT({ requests: 1, in: 100, out: 10 }) },
+        by_sdm: { "s1\u001f2026-07-01\u001fgpt-x": h.FLAT({ requests: 1, in: 100, out: 10 }) } })
+  })];
+  const { document: doc } = boot({ data, diag: withSource({
+    requested: "sessions", effective: "sessions", debug_sessions: 0,
+    chat_credit_first: "2026-06-26"
+  }) });
+
+  const note = doc.getElementById("calSourceNote");
+  assert.equal(note.hidden, false);
+  assert.match(note.textContent, /saved session/i);
+  assert.equal(doc.querySelectorAll("#calChart .calwarn").length, 0);
+});
+
+test("missing debug logs show setup steps even when saved sessions contain token data", () => {
+  const { document: doc } = boot({ diag: withSource({
+    effective: "sessions", debug_sessions: 0, chat_credit_first: "2026-06-26" }) });
+  const notice = doc.getElementById("logNotice");
+  assert.equal(notice.hidden, false);
+  assert.match(notice.textContent, /agent debug file logging/i);
+  assert.match(notice.textContent, /github\.copilot\.chat\.agentDebugLog\.fileLogging\.enabled/);
+});
+
+test("the extension can enable agent debug file logging from the notice", () => {
+  const { document: doc, window: win } = boot({
+    diag: withSource({ effective: "sessions", debug_sessions: 0 }), vscode: true
+  });
+  doc.getElementById("logEnableBtn").click();
+  assert.ok(win.__posted.some(message => message.type === "enableDebugLogs"));
+});
+
+test("deliberately choosing a store is not styled as a warning", () => {
+  const { document: doc } = boot({ diag: withSource({
+    requested: "sessions", effective: "sessions", chat_credit_first: "2026-06-26" }) });
+  const notice = doc.getElementById("sourceNotice");
+  assert.equal(notice.hidden, false);
+  assert.equal(notice.classList.contains("partial"), false);
+});
+
+test("the source banner can be dismissed and stays dismissed", () => {
+  const { document: doc, window: win } = boot({ diag: withSource({
+    effective: "sessions", debug_sessions: 0 }) });
+  doc.getElementById("sourceDismiss").click();
+  assert.equal(doc.getElementById("sourceNotice").hidden, true);
+  assert.equal(win.localStorage.getItem("cpSourceNotice"), "off");
+});
+
+test("a project name is escaped in the source banner path too", () => {
+  const { document: doc } = boot({ diag: withSource({
+    effective: "sessions", debug_sessions: 0, chat_credit_first: "<img src=x>" }) });
+  const notice = doc.getElementById("sourceNotice");
+  assert.equal(notice.querySelectorAll("img").length, 0, "diagnostics text must not inject HTML");
+});
+
+// --------------------------------------------------------------------------
+// choosing the store from Config
+// --------------------------------------------------------------------------
+
+test("the store dropdown shows what the last scan actually used", () => {
+  const diag = h.sampleDiag();
+  diag.source = { requested: "sessions", effective: "sessions",
+                  debug_sessions: 0, chat_credit_first: "2026-06-26",
+                  sessions_from_saved: 0 };
+  const { document: doc } = boot({ diag, vscode: true });
+  assert.equal(doc.getElementById("qsSource").value, "sessions");
+});
+
+test("all three stores are offered, so the automatic mode can be returned to", () => {
+  const { document: doc } = boot({ vscode: true });
+  const values = [...doc.getElementById("qsSource").options].map(o => o.value);
+  assert.deepEqual(values, ["auto", "debug", "sessions"]);
+});
+
+test("choosing a store asks the extension to rescan with it", () => {
+  const { document: doc, window: win } = boot({ vscode: true });
+  const sel = doc.getElementById("qsSource");
+  sel.value = "debug";
+  sel.dispatchEvent(new win.Event("change", { bubbles: true }));
+  const msg = win.__posted.find(m => m.type === "setSource");
+  assert.ok(msg, "nothing was sent, so the choice would not have changed the data");
+  assert.equal(msg.source, "debug");
+});
+
+test("without the extension the store cannot be changed, and says so", () => {
+  const { document: doc } = boot();          // plain file:// dashboard
+  const sel = doc.getElementById("qsSource");
+  assert.equal(sel.disabled, true, "a control that cannot work must not look usable");
+  assert.match(doc.getElementById("qsSourceNote").textContent, /--source/);
+});
+
+test("the store dropdown survives saving the rest of the config", async () => {
+  // Saving redraws the quick-settings form from the report the page was built
+  // from. The rescan the dropdown triggered has not landed yet, so re-reading
+  // it there snaps the control back to the previous store while the numbers
+  // beside it are already changing -- the disagreement it exists to prevent.
+  const { window: win, document: doc } = boot({
+    vscode: true, diag: withSource({ requested: "debug", effective: "debug", debug_sessions: 5 })
+  });
+  const sel = doc.getElementById("qsSource");
+  sel.value = "sessions";
+  sel.dispatchEvent(new win.Event("change", { bubbles: true }));
+  assert.ok(win.__posted.some(m => m.type === "setSource" && m.source === "sessions"));
+
+  doc.getElementById("qsApply").click();
+  await tick(20);
+
+  assert.equal(sel.value, "sessions",
+               "saving reverted the store while the rescan for it was still running");
+});
+
+test("once the rescan lands the dropdown reports the run again", async () => {
+  // The pending choice must not outlive the report it was waiting for, or a
+  // scan that settled somewhere else would be hidden behind the reader's pick.
+  const { window: win, document: doc } = boot({
+    vscode: true, diag: withSource({ requested: "debug", effective: "debug", debug_sessions: 5 })
+  });
+  const sel = doc.getElementById("qsSource");
+  sel.value = "sessions";
+  sel.dispatchEvent(new win.Event("change", { bubbles: true }));
+
+  win.postMessage({ type: "data", phase: "full", projects: h.sampleData(),
+                    diag: withSource({ requested: "auto", effective: "sessions",
+                                       debug_sessions: 0 }) }, "*");
+  await tick(30);
+  doc.getElementById("qsApply").click();
+  await tick(20);
+
+  assert.equal(sel.value, "auto", "the control still shows a choice the report did not use");
+});
+
+// --------------------------------------------------------------------------
+// the permanent account of agent debug logging
+// --------------------------------------------------------------------------
+
+test("Diagnostics names the debug-log setting when nothing was written", () => {
+  const { document: doc } = boot({ diag: withSource({
+    effective: "sessions", debug_sessions: 0, chat_credit_first: "2026-06-26" }) });
+  const panel = doc.getElementById("diagDebugLog");
+  assert.match(panel.textContent, /not writing agent debug logs/i);
+  assert.match(panel.textContent, /github\.copilot\.chat\.agentDebugLog\.fileLogging\.enabled/);
+  assert.match(panel.textContent, /cannot be recovered/i,
+               "enabling it must not read as a promise to recover the past");
+});
+
+test("Diagnostics still explains debug logging when it is switched on", () => {
+  // A panel that only appears in the bad case leaves a reader who dismissed the
+  // banner with nowhere to check, and an empty one reads as a rendering fault.
+  const { document: doc } = boot({ diag: withSource({ debug_sessions: 7 }) });
+  const panel = doc.getElementById("diagDebugLog");
+  assert.match(panel.textContent, /logging is on/i);
+  assert.match(panel.textContent, /7 sessions/);
+  assert.match(panel.textContent, /rotate/i, "rotation is why an old day looks thin");
+});
+
+test("Diagnostics reports sessions taken from the saved copy instead", () => {
+  const { document: doc } = boot({ diag: withSource({ debug_sessions: 40, sessions_from_saved: 6 }) });
+  const panel = doc.getElementById("diagDebugLog");
+  assert.match(panel.textContent, /6 of those sessions/);
+  assert.match(panel.textContent, /turns rather than model calls/);
+});
+
+test("a sessions-only run says it did not look, rather than that there was nothing", () => {
+  const diag = withSource({ requested: "sessions", effective: "sessions", debug_sessions: 0 });
+  const { document: doc } = boot({ diag });
+  const panel = doc.getElementById("diagDebugLog");
+  assert.match(panel.textContent, /not read/i);
+  assert.doesNotMatch(panel.textContent, /is not writing|disabled/i,
+                      "a store that was excluded is not evidence that logging is off");
+  assert.match(panel.textContent, /Automatic|request logs/,
+               "a reader told nothing was read needs to know how to find out");
+  assert.equal(doc.getElementById("logNotice").hidden, true,
+               "offering to enable a setting that may already be on");
+});
+
+test("Diagnostics explains why the two stores report different totals", () => {
+  // Switching the store moves every headline, and the largest gap -- requests --
+  // is a change of unit rather than a change in usage. A reader who is not told
+  // that reads the two runs as two different amounts of spend.
+  const { document: doc } = boot();
+  const panel = doc.getElementById("diagStores");
+  assert.ok(panel, "there is no permanent account of the difference between the stores");
+  assert.match(panel.textContent, /one model call/i);
+  assert.match(panel.textContent, /one turn/i);
+  assert.match(panel.textContent, /neither is a subset of the other/i,
+               "neither store is the complete one, and neither total is the wrong one");
+  assert.match(panel.textContent, /copilotCredits/,
+               "the missing credit field is why the saved-session total is lower");
 });

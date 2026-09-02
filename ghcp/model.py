@@ -142,6 +142,47 @@ def name_session(m: dict, sid: str, name: str | None) -> None:
         m["session_names"][sid] = text[:NAME_CAP]
 
 
+def absorb(dst: dict, src: dict) -> None:
+    """Fold one metrics record into another, dimension for dimension.
+
+    Used where two partial copies of the same sessions are reconciled: each
+    candidate is measured on its own first, then the one that kept more is
+    folded in and the other is dropped whole. Adding both would count the same
+    calls twice, and taking half of each would leave the breakdowns disagreeing.
+    """
+    for date, b in src["by_day"].items():
+        t = dst["by_day"][date]
+        for f in DAY_FIELDS:
+            t[f] += b[f]
+    for dim in ("by_model", "by_agent", "by_am", "by_dm", "by_sdm",
+                "by_da", "by_dam"):
+        for key, b in src[dim].items():
+            t = dst[dim][key]
+            for f in FLAT_FIELDS:
+                t[f] += b[f]
+    for dim in ("by_skill", "by_ds"):
+        for key, b in src[dim].items():
+            t = dst[dim][key]
+            for f in SKILL_FIELDS:
+                t[f] += b.get(f, 0)
+    for dim in ("by_tool", "by_dt", "by_lang", "by_dl"):
+        for key, c in src[dim].items():
+            dst[dim][key] += c
+    dst["session_names"].update(src["session_names"])
+
+
+def coverage_score(m: dict) -> tuple[float, int]:
+    """How much of a session a copy kept, as (credits, input tokens).
+
+    Both stores record the same calls, so the copy reporting more is the one
+    that lost less -- this is a completeness comparison, not a claim that either
+    is right. Input tokens break the tie for sessions recorded before credits
+    were written at all, where every copy reports zero.
+    """
+    return (round(sum(b["aiu"] for b in m["by_day"].values()), 4),
+            sum(b["in"] for b in m["by_day"].values()))
+
+
 def _merge(d: dict, members: list[str]) -> dict:
     """Sum per-day, per-model, per-agent, per-am and per-skill metrics across
     members (project names that share a canonical basename)."""

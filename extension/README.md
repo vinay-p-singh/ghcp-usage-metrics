@@ -22,8 +22,25 @@ Nothing leaves your machine — the extractor only reads your local Copilot logs
 - **Token, AI-credit (AIU) & model figures** come from fields GitHub Copilot Chat
   writes into its own local request logs (`debug-logs` and `chatSessions`). Older
   sessions get trimmed and debug logs rotate, so a machine may show only request
-  counts — that's about what was retained, **not** a logging setting. Run
-  *Copilot Usage: Diagnostics* to see exactly what was found and why.
+  counts. Run *Copilot Usage: Diagnostics* to see exactly what was found and why.
+
+## Data source and agent debug logs
+
+Open the dashboard, click the **Config** gear, and use **VS Code data source**:
+
+- **Automatic (recommended)** compares agent debug logs and saved chat sessions
+  per session, then keeps the fuller copy.
+- **Agent debug logs only** gives the richest per-call detail while those logs
+  are retained.
+- **Saved chat sessions only** works when debug logs are unavailable. It reads
+  workspace sessions plus `globalStorage/emptyWindowChatSessions`, with lower
+  coverage where VS Code trimmed request bodies.
+
+When the dashboard detects no agent debug-log sessions, click **Enable logging**.
+The extension sets
+`github.copilot.chat.agentDebugLog.fileLogging.enabled` to `true`. Reload the
+VS Code window, start a new chat, and refresh the dashboard. Existing history
+cannot be recovered if its logs were never written.
 
 ## Develop / run
 

@@ -196,3 +196,46 @@ test("missing credits are flagged however small the day", () => {
   assert.ok(lib.dayWarning({ requests: 9, aiu: 0, noToken: 0 }),
             "a day with no credits at all is always worth saying");
 });
+
+// ---- naming the cause ------------------------------------------------------
+// "Something is missing" invites a reader to distrust every figure on the page.
+// The harness that stopped writing figures down is knowable, so it is named.
+
+test("the warning names the harness responsible and why", () => {
+  const w = lib.dayWarning({ requests: 494, aiu: 16428, noToken: 465,
+                             noTokenBy: { cli: 463, vscode: 2 } });
+  assert.match(w, /Copilot CLI/, "a reader cannot act on an unattributed warning");
+  assert.match(w, /when a session closes/, "the reason, not just the culprit");
+});
+
+test("a mixed day says it is mixed rather than blaming one harness", () => {
+  const w = lib.dayWarning({ requests: 100, aiu: 500, noToken: 30,
+                             noTokenBy: { cli: 20, vscode: 10 } });
+  assert.match(w, /Mostly Copilot CLI \(20 of 30\)/);
+});
+
+test("a single-harness day is not padded with a share it does not need", () => {
+  const w = lib.dayWarning({ requests: 100, aiu: 500, noToken: 30,
+                             noTokenBy: { vscode: 30 } });
+  assert.match(w, /VS Code: /);
+  assert.doesNotMatch(w, /Mostly/);
+});
+
+test("a day with no credits at all still names its cause", () => {
+  const w = lib.dayWarning({ requests: 12, aiu: 0, noToken: 12,
+                             noTokenBy: { cli: 11, vscode: 1 } });
+  assert.match(w, /credit/i);
+  assert.match(w, /Copilot CLI/);
+});
+
+test("a warning with no harness breakdown still reads as a sentence", () => {
+  // The breakdown is optional: older reports and the calendar's own flag test
+  // pass only the totals, and a dangling colon would be worse than no cause.
+  const w = lib.dayWarning({ requests: 100, aiu: 500, noToken: 12 });
+  assert.match(w, /whole story\.$/);
+});
+
+test("an empty breakdown names nothing rather than guessing", () => {
+  const w = lib.dayWarning({ requests: 100, aiu: 500, noToken: 12, noTokenBy: {} });
+  assert.match(w, /whole story\.$/);
+});

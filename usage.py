@@ -25,7 +25,8 @@ import sys
 import time
 import traceback
 
-from ghcp.diagnostics import DIAG, coverage, credit_floor, diag_reset, guarded
+from ghcp.diagnostics import (DIAG, SOURCES, coverage, credit_floor,
+                              diag_reset, guarded)
 from ghcp.model import build_projects
 from ghcp.report import write_dashboard as _write_dashboard
 from ghcp.scan.claude import scan_claude as _scan_claude
@@ -68,6 +69,10 @@ _ROOT = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(_ROOT, "out")
 CACHE = os.path.join(_ROOT, ".cache", "vscode_billing.json")
 
+# Which VS Code store to read; set from --source, read by the wrapper below at
+# call time so tests and the extension can point the scan at one store.
+SOURCE = "auto"
+
 
 def _vs_variants() -> list[tuple[str, str]]:
     """(workspaceStorage, session-store.db) pairs to scan. Always the current
@@ -89,7 +94,7 @@ def _vs_variants() -> list[tuple[str, str]]:
 
 def scan_vscode() -> dict[str, dict]:
     """Scan every installed VS Code variant using this module's configured paths."""
-    return _scan_vscode(_vs_variants(), CACHE)
+    return _scan_vscode(_vs_variants(), CACHE, SOURCE)
 
 
 def scan_cli() -> dict[str, dict]:
@@ -168,6 +173,21 @@ def _quick_days(argv: list[str]) -> int:
     return 10
 
 
+def _source(argv: list[str]) -> str:
+    """Store requested via ``--source auto|debug|sessions`` (default auto).
+
+    An unrecognised value falls back to auto rather than failing the run: the
+    scan is the point of the command, and auto is what the user would have got
+    by not passing the flag at all.
+    """
+    if "--source" not in argv:
+        return "auto"
+    i = argv.index("--source")
+    if i + 1 < len(argv) and argv[i + 1] in SOURCES:
+        return argv[i + 1]
+    return "auto"
+
+
 def _totals(projects: list[dict]) -> tuple[int, int, int, float, int]:
     days: set[str] = set()
     sess = req = 0
@@ -226,6 +246,8 @@ def main() -> None:
         return
     diag_reset()
     set_quick_window(_quick_days(argv))
+    global SOURCE  # noqa: PLW0603 - the wrapper reads it at call time
+    SOURCE = _source(argv)
 
     results = {}
     for key, source, fn in (("vscode", "vscode_debug", scan_vscode),

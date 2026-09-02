@@ -35,10 +35,15 @@ window.addEventListener("message", ev => {
   if (msg.type !== "data" || !Array.isArray(msg.projects)) return;
   if (msg.diag) DIAG = msg.diag;
   if (msg.generated) refState.dataset.gen = msg.generated;
+  // The report now says which store it came from, so the choice stops being
+  // pending and the control goes back to reporting the run.
+  sourcePending = null;
+  syncReportedSettings();
   initData(msg.projects);
   render();
   renderDiagnostics();
   renderFloorNotice();
+  renderSourceNotice();
   updatePartialBanner();
   refreshBtn.disabled = false;
   refreshBtn.innerHTML = "&#8635; Refresh data";
@@ -48,30 +53,24 @@ window.addEventListener("message", ev => {
 
 updatePartialBanner();
 
-// ---- onboarding notice: no token/AIU data means Copilot Chat logging is off ----
+// ---- onboarding notice: agent debug file logging is off ------------------
 (function () {
   const notice = document.getElementById("logNotice");
+  const body = document.getElementById("logBody");
   const enableBtn = document.getElementById("logEnableBtn");
   const dismiss = document.getElementById("logDismiss");
   if (!notice) return;
-  let hasTokens = false;
-  for (const d of DATA) {
-    for (const cl of [d.vscode, d.cli, d.claude]) {
-      for (const k in (cl.by_day || {})) {
-        const b = cl.by_day[k];
-        if ((b.aiu || 0) > 0 || (b.in || 0) > 0) { hasTokens = true; break; }
-      }
-      if (hasTokens) break;
-    }
-    if (hasTokens) break;
-  }
+  const setup = debugLogSetup(DIAG && DIAG.source);
   let dismissed = false;
   try { dismissed = localStorage.getItem("cpLogNotice") === "off"; } catch (e) {}
-  if (DATA.length && !hasTokens && !dismissed) {
+  if (setup && !dismissed) {
+    body.innerHTML = `<b>Copilot agent debug file logging is disabled.</b> ${esc(setup.body)}`;
     notice.hidden = false;
-    if (!vscodeApi) enableBtn.hidden = true;   // only actionable inside the extension
+    if (!vscodeApi) enableBtn.hidden = true;
   }
-  enableBtn.addEventListener("click", () => { if (vscodeApi) vscodeApi.postMessage({ type: "diagnostics" }); });
+  enableBtn.addEventListener("click", () => {
+    if (vscodeApi) vscodeApi.postMessage({ type: "enableDebugLogs" });
+  });
   dismiss.addEventListener("click", () => {
     notice.hidden = true;
     try { localStorage.setItem("cpLogNotice", "off"); } catch (e) {}
@@ -98,9 +97,9 @@ function renderFloorNotice() {
     return;
   }
   const onsets = Object.entries(cf.onsets || {})
-    .map(([k, v]) => `${CLIENT_NAME[k] || k} from ${v}`).join(", ");
+    .map(([k, v]) => `${CLIENT_LABEL[k] || k} from ${v}`).join(", ");
   const never = (cf.never_reports || [])
-    .map(k => CLIENT_NAME[k] || k).join(", ");
+    .map(k => CLIENT_LABEL[k] || k).join(", ");
   body.innerHTML =
     `<b>Showing usage from ${esc(cf.floor)}, when every harness was reporting AI credits.</b> ` +
     `${esc(onsets)}. ${cf.days_before} earlier active day${cf.days_before === 1 ? "" : "s"} ` +
@@ -130,6 +129,35 @@ function renderFloorNotice() {
   }
 })();
 renderFloorNotice();
+
+// ---- which store produced these numbers ------------------------------------
+// A report built from saved sessions alone is a floor, not a bill, and nothing
+// in the figures themselves says so.
+function renderSourceNotice() {
+  const notice = document.getElementById("sourceNotice");
+  const body = document.getElementById("sourceBody");
+  if (!notice || !body) return;
+  const n = sourceNotice(DIAG && DIAG.source);
+  let dismissed = false;
+  try { dismissed = localStorage.getItem("cpSourceNotice") === "off"; } catch (e) {}
+  if (!n || dismissed) {
+    notice.hidden = true;
+    return;
+  }
+  notice.classList.toggle("partial", n.level === "warn");
+  body.innerHTML = `<b>${esc(n.title)}.</b> ${esc(n.body)}`;
+  notice.hidden = false;
+}
+
+(function () {
+  const dismiss = document.getElementById("sourceDismiss");
+  if (!dismiss) return;
+  dismiss.addEventListener("click", () => {
+    document.getElementById("sourceNotice").hidden = true;
+    try { localStorage.setItem("cpSourceNotice", "off"); } catch (e) {}
+  });
+})();
+renderSourceNotice();
 
 // Tell the extension the message listener is live; anything it produced while
 // this page was still loading gets flushed now instead of being lost.

@@ -164,7 +164,7 @@ agentBody.addEventListener("click", e => {
   const exp = document.createElement("tr");
   exp.className = "exp";
   exp.innerHTML = `<td colspan="6"><table class="subtab"><thead><tr><th></th><th class="num">Req</th>` +
-    `<th class="num">AIU</th><th class="num">In</th><th class="num">Out</th></tr></thead><tbody>` +
+    `<th class="num">AI credits</th><th class="num">In</th><th class="num">Out</th></tr></thead><tbody>` +
     `<tr class="grp"><td colspan="5">By model</td></tr>${rows}</tbody></table></td>`;
   tr.after(exp);
 });
@@ -201,15 +201,15 @@ function renderSkills(agg) {
 // plan allowance (not locally detectable) -> config budget.monthlyAiu -> none.
 function renderForecast(daily, from, to) {
   const f = forecastFrom(daily, new Date());
-  if (!f) { fcView.innerHTML = '<div class="muted">No AIU in range to project from.</div>'; return; }
+  if (!f) { fcView.innerHTML = '<div class="muted">No AI credits in range to project from.</div>'; return; }
   const { consumed, activeDays, spanDays, rate, rateLabel, mtd, daysRemaining, projMonth } = f;
   const budget = (CFG.budget && typeof CFG.budget.monthlyAiu === "number" && CFG.budget.monthlyAiu > 0) ? CFG.budget.monthlyAiu : null;
   const card = (k, v, s) => `<div class="pill"><div class="k">${k}</div>` +
     `<div class="v" style="font-size:var(--card-v);font-weight:600;line-height:1.3">${v}</div><div class="s">${s}</div></div>`;
   const cards = [
-    card("Consumed (in range)", fmtAiu(consumed) + " AIU", `${fmt(activeDays)} active days \u00b7 ${fmt(spanDays)} calendar days`),
-    card("Daily rate", fmtAiu(rate) + " AIU/day", rateLabel),
-    card("Projected end of month", fmtAiu(projMonth) + " AIU", `MTD ${fmtAiu(mtd)} \u00b7 ${daysRemaining}d left`),
+    card("Consumed (in range)", fmtAiu(consumed) + " credits", `${fmt(activeDays)} active days \u00b7 ${fmt(spanDays)} calendar days`),
+    card("Daily rate", fmtAiu(rate) + " credits/day", rateLabel),
+    card("Projected end of month", fmtAiu(projMonth) + " credits", `MTD ${fmtAiu(mtd)} \u00b7 ${daysRemaining}d left`),
   ];
   if (costOn()) {
     cards.push(card("Projected cost, end of month", fmtUsd(projMonth),
@@ -217,7 +217,7 @@ function renderForecast(daily, from, to) {
   }
   if (budget) {
     const pct = projMonth / budget * 100;
-    cards.push(card("Monthly budget", fmtAiu(budget) + " AIU", `EoM projection ${pct.toFixed(0)}% of budget`));
+    cards.push(card("Monthly budget", fmtAiu(budget) + " credits", `EoM projection ${pct.toFixed(0)}% of budget`));
   }
   const rows = f.horizons.map(([label, proj, months]) => {
     let budgetCell = '<td class="num muted">\u2014</td>', statusCell = '<td class="num muted">\u2014</td>';
@@ -235,8 +235,8 @@ function renderForecast(daily, from, to) {
     : `No monthly budget set \u2014 showing projected charges only. Add <code>budget.monthlyAiu</code> in Config to compare (plan allowance isn't locally detectable for this account).`;
   fcView.innerHTML = `<div class="pills">${cards.join("")}</div>` +
     `<div class="ptable-scroll" style="margin-top:14px"><table class="ptable"><thead><tr><th>Horizon</th>` +
-    `<th class="num">Projected AIU</th><th class="num cost">Projected cost</th><th class="num">Budget</th><th class="num">vs budget</th></tr></thead>` +
+    `<th class="num">Projected credits</th><th class="num cost">Projected cost</th><th class="num">Budget</th><th class="num">vs budget</th></tr></thead>` +
     `<tbody>${rows}</tbody></table></div>` +
-    `<p class="cfg-note" style="margin-top:10px">Projections are linear estimates from recorded AIU (rate = ${rateLabel}); real usage is bursty. ${note}</p>`;
+    `<p class="cfg-note" style="margin-top:10px">Projections are linear estimates from recorded AI credits (rate = ${rateLabel}); real usage is bursty. ${note}</p>`;
 }
 

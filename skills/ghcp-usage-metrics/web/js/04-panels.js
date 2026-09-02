@@ -88,7 +88,7 @@ function projectDetailHTML(name) {
   const agentRows = sect(agentF) || none;
   const dayRows = Object.keys(day).sort().map(dt => row(dt, day[dt])).join("")
     || '<tr><td colspan="6" class="muted">none in range</td></tr>';
-  return `<table class="subtab"><thead><tr><th></th><th class="num">Req</th><th class="num">AIU</th>` +
+  return `<table class="subtab"><thead><tr><th></th><th class="num">Req</th><th class="num">AI credits</th>` +
     `<th class="num cost">Cost</th><th class="num">In</th><th class="num">Out</th></tr></thead><tbody>` +
     grp("By model") + modelRows +
     grp("By agent") + agentRows +

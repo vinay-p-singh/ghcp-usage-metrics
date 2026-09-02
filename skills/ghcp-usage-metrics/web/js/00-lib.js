@@ -30,12 +30,97 @@ function usdFrom(aiu, rate) {
   return "$" + v.toFixed(3);
 }
 
+// Which VS Code store the scan read, said out loud.
+//
+// Two stores hold the same sessions and neither is complete: request logs carry
+// every model call but rotate away, saved sessions survive longer but keep only
+// the most recent turns. Nothing in the numbers reveals which one produced
+// them, so a report built from the thinner store has to say so -- otherwise a
+// low total reads as low usage.
+function sourceNotice(rec) {
+  if (!rec || !rec.effective || rec.effective === "auto") return null;
+  const chosen = rec.requested === rec.effective;
+  if (rec.effective === "debug") {
+    return {
+      level: "info",
+      title: "Reading request logs only",
+      body: "You asked for request logs only, so saved sessions were not read. "
+        + "Sessions the logs have already rotated away are missing from these figures."
+    };
+  }
+  const credits = rec.chat_credit_first
+    ? "Saved sessions only carry an AI-credit figure from " + rec.chat_credit_first
+      + " onward, so earlier days here show requests and tokens but no credits."
+    : "None of the saved sessions on this machine carry a credit figure, so no "
+      + "AI credits are reported at all.";
+  const why = chosen
+    ? "You asked for saved sessions only, so the request logs were not read."
+    : "No request logs were found, so this was built from VS Code's saved sessions.";
+  return {
+    level: chosen ? "info" : "warn",
+    title: "Built from saved sessions",
+    body: why + " " + credits
+      + " VS Code keeps only the most recent turns of each saved session, so read "
+      + "these figures as a floor rather than a bill."
+  };
+}
+
+// Saved-session retention is incomplete by design, so marking most calendar
+// days repeats one systemic limitation as dozens of exceptional-day warnings.
+// Request-log and merged reports keep the markers because a thin day there is
+// exceptional and therefore useful to call out.
+function calendarWarningPolicy(rec) {
+  if (!rec || rec.effective !== "sessions") return { perDay: true, note: "" };
+  const credits = rec.chat_credit_first
+    ? `AI-credit fields appear in retained requests from ${rec.chat_credit_first} onward.`
+    : "No retained request carries an AI-credit field.";
+  return {
+    perDay: false,
+    note: `Saved session mode has partial coverage. ${credits} Per-day warning ` +
+      "badges are hidden because this limitation affects the report broadly; " +
+      "see Diagnostics for the retained and trimmed request counts."
+  };
+}
+
+const SOURCE_CHOICES = ["auto", "debug", "sessions"];
+
+// What the store control should show: the store the data on screen was built
+// from, not a separately stored preference. Keeping one source of truth is the
+// point -- a saved setting could disagree with the report it sits next to, and
+// the reader would have no way to tell which one produced the numbers.
+function sourceChoice(diag) {
+  const want = diag && diag.source && diag.source.requested;
+  return SOURCE_CHOICES.includes(want) ? want : "auto";
+}
+
+const DEBUG_LOG_SETTING = "github.copilot.chat.agentDebugLog.fileLogging.enabled";
+
+// File logging is off by default in Copilot. Saved sessions keep the dashboard
+// usable, but enabling this setting improves future model-call and token
+// coverage. An absent diagnostic record is unknown, not proof that it is off --
+// and neither is a zero produced by a sessions-only run, which never opened the
+// request logs to find out.
+function debugLogSetup(rec) {
+  if (!rec || typeof rec.debug_sessions !== "number" || rec.debug_sessions > 0) return null;
+  if (rec.requested === "sessions") return null;
+  return {
+    setting: DEBUG_LOG_SETTING,
+    body: `Set "${DEBUG_LOG_SETTING}": true in VS Code Settings JSON, reload the window, `
+      + "then start a new chat. Existing saved-session data remains available; only new "
+      + "activity can create agent debug log files."
+  };
+}
+
 // ---- config ----
 const _lc = s => String(s).toLowerCase();
 const CLIENT_ALIAS = { "vscode": "vs", "vs code": "vs", "vs": "vs",
   "cli": "cli", "copilot cli": "cli", "claude": "cla", "claude code": "cla", "cla": "cla" };
 // The per-project keys each harness writes its buckets under.
 const CLIENT_KEYS = ["vscode", "cli", "claude"];
+// What a harness is called wherever a reader sees it named.
+const CLIENT_LABEL = { vscode: "VS Code", cli: "Copilot CLI", claude: "Claude Code" };
+// The short keys the render loop carries, back to the per-project keys.
+const CLIENT_OF = { vs: "vscode", cli: "cli", cla: "claude" };
 
 // Where the extractor files a request whose source never named a model. It is
 // not a model anyone chose, so nothing that lists, charts or ranks models may
@@ -390,13 +475,44 @@ function creditFloorStart(diag, min, cfgSince, enabled) {
 // several hundred. Missing credits is exempt -- that is material at any size.
 const DAY_WARN_SHARE = 0.05;
 
+// A marker that only says "something is missing" invites the reader to distrust
+// the whole report. Naming the harness that stopped writing figures down, and
+// why, keeps the doubt where it belongs. Kept short deliberately: this is
+// tooltip copy, and the Diagnostics tab carries the full account.
+const DAY_WARN_CAUSE = {
+  cli: "the Copilot CLI writes its billing rows when a session closes, so turns " +
+    "from sessions that never closed, or that predate its billing telemetry, are " +
+    "recorded as having happened but not as having cost anything",
+  vscode: "VS Code had already trimmed those turns out of the session it kept, " +
+    "leaving the fact that they happened without their size",
+  claude: "Claude Code records tokens but publishes no AI-credit figure at all"
+};
+
+// Which harness is answerable for a day's missing figures. Reports the largest
+// contributor and says so when it is not the only one, rather than implying a
+// single cause for a mixed day.
+function dayWarnCause(by) {
+  const ranked = Object.keys(by || {})
+    .filter(k => by[k] > 0 && DAY_WARN_CAUSE[k])
+    .sort((a, b) => by[b] - by[a]);
+  if (!ranked.length) return "";
+  const top = ranked[0];
+  const total = ranked.reduce((s, k) => s + by[k], 0);
+  const who = ranked.length > 1
+    ? `Mostly ${CLIENT_LABEL[top]} (${fmt(by[top])} of ${fmt(total)})`
+    : CLIENT_LABEL[top];
+  return ` ${who}: ${DAY_WARN_CAUSE[top]}.`;
+}
+
 function dayWarning(d, minShare) {
   const req = (d && d.requests) || 0;
   if (!req) return null;
+  const cause = dayWarnCause(d && d.noTokenBy);
   if (!((d && d.aiu) > 0)) {
     return `${fmt(req)} request${req === 1 ? "" : "s"} on this day, and no AI ` +
       `credits were recorded for any of them. The calls are real; the credit ` +
-      `figure was never written down, so this day reads as free and was not.`;
+      `figure was never written down, so this day reads as free and was not.` +
+      cause;
   }
   const nt = (d && d.noToken) || 0;
   const share = minShare == null ? DAY_WARN_SHARE : minShare;
@@ -404,7 +520,7 @@ function dayWarning(d, minShare) {
     return `${fmt(nt)} of ${fmt(req)} requests on this day ` +
       `(${Math.round(nt * 100 / req)}%) carry no token payload. They are counted ` +
       `as requests and add nothing to the totals, so the figures for this day ` +
-      `are a floor rather than the whole story.`;
+      `are a floor rather than the whole story.` + cause;
   }
   return null;
 }
@@ -499,5 +615,8 @@ if (typeof module !== "undefined" && module.exports) {
                      calBucket, CLIENT_ALIAS, arcPath, pieSegments, forecastFrom,
                      rankAgents, splitAgents, priciestPerRequest, BASE_AGENTS,
                      creditFloorStart, dayWarning, rankSessions, cacheSplit,
-                     sortSessions, recordedInCycle, reconcileState, todayIso };
+                     sortSessions, recordedInCycle, reconcileState, todayIso,
+                    sourceNotice, sourceChoice, SOURCE_CHOICES, calendarWarningPolicy,
+                     debugLogSetup, DEBUG_LOG_SETTING,
+                     CLIENT_LABEL, CLIENT_OF, dayWarnCause, DAY_WARN_CAUSE };
 }

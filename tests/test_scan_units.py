@@ -7,6 +7,7 @@ VS Code parsing.
 """
 from __future__ import annotations
 
+import datetime
 import json
 import os
 import sqlite3
@@ -16,12 +17,12 @@ import pytest
 
 import synthetic
 from ghcp import billing, report, window
-from ghcp.constants import AGENT_CLI, NO_TOKEN
+from ghcp.constants import AGENT_CLI, AM_SEP, NO_TOKEN
 from ghcp.diagnostics import DIAG, coverage, diag_reset, src
 from ghcp.model import _metrics
 from ghcp.scan.claude import scan_claude
 from ghcp.scan.cli import scan_cli
-from ghcp.scan.vscode import sid_skills_map
+from ghcp.scan.vscode import scan_vscode, sid_skills_map
 
 
 @pytest.fixture(autouse=True)
@@ -235,3 +236,17 @@ class TestCoverage:
             return {"name": name, "vscode": _metrics(), "cli": m, "claude": _metrics()}
         coverage([proj("small", 2), proj("big", 9)])
         assert [r["project"] for r in DIAG["no_token_rows"]] == ["big", "small"]
+
+
+class TestUndatedToolCalls:
+    def test_are_filed_on_the_session_day_not_the_day_the_scan_ran(self, tmp_path):
+        """A tool call the log did not stamp is dated from its session.
+
+        Reading the clock instead would move a historical figure every time the
+        scan is re-run, and would quietly rot any recorded expectation of it.
+        """
+        paths = synthetic.build_tree(tmp_path)
+        out = scan_vscode([(paths["vs_root"], paths["vs_db"])], paths["cache"])
+        dated = list(out["acme/alpha"]["by_dt"])
+        assert dated == ["2026-05-02" + AM_SEP + "read_file"], dated
+        assert datetime.date.today().isoformat() not in "".join(dated)
